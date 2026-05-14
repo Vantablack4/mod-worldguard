@@ -1,5 +1,9 @@
 # Changelog
 
+## 7.0.17
+
+* Add lava-harden flag for cobblestone/stone/obsidian/basalt forming
+
 ## 7.0.16
 
 * Update to 1.21.11.
