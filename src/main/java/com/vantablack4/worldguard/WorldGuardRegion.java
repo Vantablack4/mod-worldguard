@@ -1,7 +1,11 @@
 package com.vantablack4.worldguard;
 
+import com.vantablack4.worldguard.model.RegionDomain;
+import com.vantablack4.worldguard.model.RegionType;
+
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -16,9 +20,21 @@ public record WorldGuardRegion(
     int maxY,
     int maxZ,
     int priority,
+    String parentId,
+    RegionType type,
+    Set<UUID> owners,
     Set<UUID> members,
-    Map<WorldGuardFlag, FlagState> flags
+    Set<String> ownerGroups,
+    Set<String> memberGroups,
+    Map<WorldGuardFlag, FlagState> flags,
+    List<PolygonPoint> polygonPoints
 ) {
+    public static final String GLOBAL_REGION_ID = "__global__";
+    public static final String ANY_WORLD = "*";
+
+    public record PolygonPoint(int x, int z) {
+    }
+
     public WorldGuardRegion {
         id = WorldGuardStorage.normalizeId(id);
         if (id.isBlank()) {
@@ -28,6 +44,15 @@ public record WorldGuardRegion(
             throw new IllegalArgumentException("World id is required");
         }
         world = world.trim();
+        type = type == null ? RegionType.CUBOID : type;
+        if (id.equals(GLOBAL_REGION_ID)) {
+            type = RegionType.GLOBAL;
+        }
+        parentId = WorldGuardStorage.normalizeId(parentId);
+        if (!parentId.isBlank() && parentId.equals(id)) {
+            throw new IllegalArgumentException("Region cannot be its own parent: " + id);
+        }
+        polygonPoints = normalizePolygonPoints(type, polygonPoints);
 
         int originalMinX = minX;
         int originalMinY = minY;
@@ -42,13 +67,112 @@ public record WorldGuardRegion(
         maxY = Math.max(originalMinY, originalMaxY);
         maxZ = Math.max(originalMinZ, originalMaxZ);
 
+        if (type == RegionType.GLOBAL) {
+            minX = 0;
+            minY = 0;
+            minZ = 0;
+            maxX = 0;
+            maxY = 0;
+            maxZ = 0;
+        } else if (type == RegionType.POLYGON) {
+            minX = polygonPoints.stream().mapToInt(PolygonPoint::x).min().orElseThrow();
+            maxX = polygonPoints.stream().mapToInt(PolygonPoint::x).max().orElseThrow();
+            minZ = polygonPoints.stream().mapToInt(PolygonPoint::z).min().orElseThrow();
+            maxZ = polygonPoints.stream().mapToInt(PolygonPoint::z).max().orElseThrow();
+        }
+
+        owners = owners == null ? Set.of() : Set.copyOf(owners);
         members = members == null ? Set.of() : Set.copyOf(members);
+        RegionDomain ownerDomain = new RegionDomain(owners, ownerGroups);
+        RegionDomain memberDomain = new RegionDomain(members, memberGroups);
+        ownerGroups = ownerDomain.groups();
+        memberGroups = memberDomain.groups();
+
         EnumMap<WorldGuardFlag, FlagState> copiedFlags = new EnumMap<>(WorldGuardFlag.class);
         if (flags != null) {
             copiedFlags.putAll(flags);
         }
-        copiedFlags.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue() == FlagState.UNSET);
+        RegionType normalizedType = type;
+        copiedFlags.entrySet().removeIf(entry ->
+            entry.getValue() == null
+                || entry.getValue() == FlagState.UNSET
+                || normalizedType == RegionType.GLOBAL
+                    && entry.getKey().preventsAllowOnGlobal()
+                    && entry.getValue() == FlagState.ALLOW
+        );
         flags = Collections.unmodifiableMap(copiedFlags);
+    }
+
+    public WorldGuardRegion(
+        String id,
+        String world,
+        int minX,
+        int minY,
+        int minZ,
+        int maxX,
+        int maxY,
+        int maxZ,
+        int priority,
+        String parentId,
+        RegionType type,
+        Set<UUID> owners,
+        Set<UUID> members,
+        Set<String> ownerGroups,
+        Set<String> memberGroups,
+        Map<WorldGuardFlag, FlagState> flags
+    ) {
+        this(
+            id,
+            world,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            priority,
+            parentId,
+            type,
+            owners,
+            members,
+            ownerGroups,
+            memberGroups,
+            flags,
+            List.of()
+        );
+    }
+
+    public WorldGuardRegion(
+        String id,
+        String world,
+        int minX,
+        int minY,
+        int minZ,
+        int maxX,
+        int maxY,
+        int maxZ,
+        int priority,
+        Set<UUID> members,
+        Map<WorldGuardFlag, FlagState> flags
+    ) {
+        this(
+            id,
+            world,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            priority,
+            "",
+            RegionType.CUBOID,
+            Set.of(),
+            members,
+            Set.of(),
+            Set.of(),
+            flags
+        );
     }
 
     public static WorldGuardRegion defaultProtected(
@@ -62,27 +186,94 @@ public record WorldGuardRegion(
         int z2,
         int priority
     ) {
-        EnumMap<WorldGuardFlag, FlagState> flags = new EnumMap<>(WorldGuardFlag.class);
-        flags.put(WorldGuardFlag.BUILD, FlagState.DENY);
-        flags.put(WorldGuardFlag.INTERACT, FlagState.DENY);
-        flags.put(WorldGuardFlag.USE_ENTITY, FlagState.DENY);
-        flags.put(WorldGuardFlag.ATTACK_ENTITY, FlagState.DENY);
-        flags.put(WorldGuardFlag.ITEM_USE, FlagState.DENY);
-        return new WorldGuardRegion(id, world, x1, y1, z1, x2, y2, z2, priority, Set.of(), flags);
+        return new WorldGuardRegion(id, world, x1, y1, z1, x2, y2, z2, priority, Set.of(), defaultProtectedFlags());
+    }
+
+    public static WorldGuardRegion defaultProtectedPolygon(
+        String id,
+        String world,
+        int minY,
+        int maxY,
+        List<PolygonPoint> polygonPoints,
+        int priority
+    ) {
+        return new WorldGuardRegion(
+            id,
+            world,
+            0,
+            minY,
+            0,
+            0,
+            maxY,
+            0,
+            priority,
+            "",
+            RegionType.POLYGON,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            defaultProtectedFlags(),
+            polygonPoints
+        );
+    }
+
+    public static WorldGuardRegion global(String world) {
+        return new WorldGuardRegion(
+            GLOBAL_REGION_ID,
+            world == null || world.isBlank() ? ANY_WORLD : world,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            Integer.MIN_VALUE,
+            "",
+            RegionType.GLOBAL,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
     }
 
     public boolean contains(String candidateWorld, int x, int y, int z) {
-        return world.equals(candidateWorld)
-            && x >= minX
-            && x <= maxX
-            && y >= minY
-            && y <= maxY
-            && z >= minZ
-            && z <= maxZ;
+        if (!type.physicalArea() || !appliesToWorld(candidateWorld) || y < minY || y > maxY) {
+            return false;
+        }
+        if (x < minX || x > maxX || z < minZ || z > maxZ) {
+            return false;
+        }
+        if (type == RegionType.POLYGON) {
+            return containsPolygon(x, z);
+        }
+        return true;
+    }
+
+    public boolean appliesToWorld(String candidateWorld) {
+        return world.equals(ANY_WORLD) || world.equals(candidateWorld);
+    }
+
+    public boolean global() {
+        return type == RegionType.GLOBAL || id.equals(GLOBAL_REGION_ID);
+    }
+
+    public boolean owner(UUID playerUuid) {
+        return playerUuid != null && owners.contains(playerUuid);
     }
 
     public boolean member(UUID playerUuid) {
-        return playerUuid != null && members.contains(playerUuid);
+        return playerUuid != null && (members.contains(playerUuid) || owners.contains(playerUuid));
+    }
+
+    public RegionDomain ownersDomain() {
+        return new RegionDomain(owners, ownerGroups);
+    }
+
+    public RegionDomain membersDomain() {
+        return new RegionDomain(members, memberGroups);
     }
 
     public FlagState flag(WorldGuardFlag flag) {
@@ -97,22 +288,161 @@ public record WorldGuardRegion(
         } else {
             updated.put(flag, state);
         }
-        return new WorldGuardRegion(id, world, minX, minY, minZ, maxX, maxY, maxZ, priority, members, updated);
+        return copy(parentId, type, owners, members, ownerGroups, memberGroups, updated);
+    }
+
+    public WorldGuardRegion withParent(String rawParentId) {
+        return copy(WorldGuardStorage.normalizeId(rawParentId), type, owners, members, ownerGroups, memberGroups, flags);
+    }
+
+    public WorldGuardRegion withoutParent() {
+        return withParent("");
+    }
+
+    public WorldGuardRegion withOwner(UUID playerUuid) {
+        java.util.HashSet<UUID> updated = new java.util.HashSet<>(owners);
+        updated.add(playerUuid);
+        return copy(parentId, type, updated, members, ownerGroups, memberGroups, flags);
+    }
+
+    public WorldGuardRegion withoutOwner(UUID playerUuid) {
+        java.util.HashSet<UUID> updated = new java.util.HashSet<>(owners);
+        updated.remove(playerUuid);
+        return copy(parentId, type, updated, members, ownerGroups, memberGroups, flags);
     }
 
     public WorldGuardRegion withMember(UUID playerUuid) {
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.add(playerUuid);
-        return new WorldGuardRegion(id, world, minX, minY, minZ, maxX, maxY, maxZ, priority, updated, flags);
+        return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flags);
     }
 
     public WorldGuardRegion withoutMember(UUID playerUuid) {
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.remove(playerUuid);
-        return new WorldGuardRegion(id, world, minX, minY, minZ, maxX, maxY, maxZ, priority, updated, flags);
+        return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flags);
     }
 
     public String boundsDisplay() {
+        if (global()) {
+            return world + " global";
+        }
+        if (type == RegionType.POLYGON) {
+            return world + " polygon points=" + polygonPoints.size() + " y=" + minY + " -> " + maxY
+                + " bounds " + minX + " " + minZ + " -> " + maxX + " " + maxZ;
+        }
         return world + " " + minX + " " + minY + " " + minZ + " -> " + maxX + " " + maxY + " " + maxZ;
+    }
+
+    private WorldGuardRegion copy(
+        String parentId,
+        RegionType type,
+        Set<UUID> owners,
+        Set<UUID> members,
+        Set<String> ownerGroups,
+        Set<String> memberGroups,
+        Map<WorldGuardFlag, FlagState> flags
+    ) {
+        return new WorldGuardRegion(
+            id,
+            world,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            priority,
+            parentId,
+            type,
+            owners,
+            members,
+            ownerGroups,
+            memberGroups,
+            flags,
+            polygonPoints
+        );
+    }
+
+    private boolean containsPolygon(int x, int z) {
+        boolean inside = false;
+        for (int index = 0, previous = polygonPoints.size() - 1; index < polygonPoints.size(); previous = index++) {
+            PolygonPoint start = polygonPoints.get(previous);
+            PolygonPoint end = polygonPoints.get(index);
+            if (onSegment(start, end, x, z)) {
+                return true;
+            }
+            boolean crossesZ = start.z() > z != end.z() > z;
+            if (crossesZ) {
+                double intersectionX = (double) (end.x() - start.x()) * (z - start.z())
+                    / (double) (end.z() - start.z()) + start.x();
+                if (x < intersectionX) {
+                    inside = !inside;
+                }
+            }
+        }
+        return inside;
+    }
+
+    private static boolean onSegment(PolygonPoint start, PolygonPoint end, int x, int z) {
+        long cross = (long) (x - start.x()) * (end.z() - start.z())
+            - (long) (z - start.z()) * (end.x() - start.x());
+        if (cross != 0L) {
+            return false;
+        }
+        return x >= Math.min(start.x(), end.x())
+            && x <= Math.max(start.x(), end.x())
+            && z >= Math.min(start.z(), end.z())
+            && z <= Math.max(start.z(), end.z());
+    }
+
+    private static List<PolygonPoint> normalizePolygonPoints(RegionType type, List<PolygonPoint> points) {
+        if (type != RegionType.POLYGON) {
+            return List.of();
+        }
+        if (points == null || points.isEmpty()) {
+            throw new IllegalArgumentException("Polygon regions require at least three points");
+        }
+        List<PolygonPoint> copied = points.stream()
+            .map(point -> {
+                if (point == null) {
+                    throw new IllegalArgumentException("Polygon points cannot be null");
+                }
+                return new PolygonPoint(point.x(), point.z());
+            })
+            .toList();
+        if (copied.stream().distinct().count() < 3) {
+            throw new IllegalArgumentException("Polygon regions require at least three unique points");
+        }
+        return List.copyOf(copied);
+    }
+
+    private static EnumMap<WorldGuardFlag, FlagState> defaultProtectedFlags() {
+        EnumMap<WorldGuardFlag, FlagState> flags = new EnumMap<>(WorldGuardFlag.class);
+        flags.put(WorldGuardFlag.BUILD, FlagState.DENY);
+        flags.put(WorldGuardFlag.BLOCK_BREAK, FlagState.DENY);
+        flags.put(WorldGuardFlag.BLOCK_PLACE, FlagState.DENY);
+        flags.put(WorldGuardFlag.USE, FlagState.DENY);
+        flags.put(WorldGuardFlag.INTERACT, FlagState.DENY);
+        flags.put(WorldGuardFlag.USE_ENTITY, FlagState.DENY);
+        flags.put(WorldGuardFlag.ATTACK_ENTITY, FlagState.DENY);
+        flags.put(WorldGuardFlag.ITEM_USE, FlagState.DENY);
+        flags.put(WorldGuardFlag.CHEST_ACCESS, FlagState.DENY);
+        flags.put(WorldGuardFlag.TNT, FlagState.DENY);
+        flags.put(WorldGuardFlag.CREEPER_EXPLOSION, FlagState.DENY);
+        flags.put(WorldGuardFlag.ENDERDRAGON_BLOCK_DAMAGE, FlagState.DENY);
+        flags.put(WorldGuardFlag.GHAST_FIREBALL, FlagState.DENY);
+        flags.put(WorldGuardFlag.OTHER_EXPLOSION, FlagState.DENY);
+        flags.put(WorldGuardFlag.BREEZE_WIND_CHARGE, FlagState.DENY);
+        flags.put(WorldGuardFlag.WITHER_DAMAGE, FlagState.DENY);
+        flags.put(WorldGuardFlag.MOB_GRIEF, FlagState.DENY);
+        flags.put(WorldGuardFlag.ENDER_BUILD, FlagState.DENY);
+        flags.put(WorldGuardFlag.RAVAGER_RAVAGE, FlagState.DENY);
+        flags.put(WorldGuardFlag.PISTONS, FlagState.DENY);
+        flags.put(WorldGuardFlag.FIRE_SPREAD, FlagState.DENY);
+        flags.put(WorldGuardFlag.LAVA_FIRE, FlagState.DENY);
+        flags.put(WorldGuardFlag.WATER_FLOW, FlagState.DENY);
+        flags.put(WorldGuardFlag.LAVA_FLOW, FlagState.DENY);
+        return flags;
     }
 }

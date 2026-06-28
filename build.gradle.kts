@@ -6,6 +6,7 @@ val minecraftVersion = property("minecraft_version").toString()
 val javaVersion = property("java_version").toString()
 val fabricLoaderVersion = property("fabric_loader_version").toString()
 val fabricApiVersion = property("fabric_api_version").toString()
+val worldEditVersion = property("worldedit_version").toString()
 val modVersion = property("mod_version").toString()
 val mavenGroup = property("maven_group").toString()
 val archivesBaseName = property("archives_base_name").toString()
@@ -24,6 +25,10 @@ java {
     withSourcesJar()
 }
 
+repositories {
+    maven("https://maven.enginehub.org/repo/")
+}
+
 loom {
     splitEnvironmentSourceSets()
     mods {
@@ -37,6 +42,7 @@ dependencies {
     minecraft("com.mojang:minecraft:$minecraftVersion")
     implementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
     implementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+    compileOnly("com.sk89q.worldedit:worldedit-fabric-mc$minecraftVersion:$worldEditVersion")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.14.1")
     testImplementation("org.assertj:assertj-core:3.27.3")

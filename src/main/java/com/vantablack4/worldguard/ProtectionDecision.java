@@ -13,6 +13,10 @@ public record ProtectionDecision(
         return new ProtectionDecision(false, region.id(), flag);
     }
 
+    public static ProtectionDecision deny(String regionId, WorldGuardFlag flag) {
+        return new ProtectionDecision(false, regionId == null ? "" : regionId, flag);
+    }
+
     public String message() {
         if (allowed) {
             return "";

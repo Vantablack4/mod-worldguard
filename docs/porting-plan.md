@@ -10,21 +10,26 @@ listeners translate server events into WorldGuard's internal event model.
 
 `EngineHub/WorldEdit` does ship first-party Fabric support. Treat WorldEdit as
 the right selection/editing integration point, but keep the protection runtime
-independent so Vantablack can boot without a hard WorldEdit coupling unless we
-choose to add selection import.
+independent so Vantablack can boot without a hard WorldEdit coupling.
 
-## Current MVP
+## Current Fabric Surface
 
-The first Vantablack Fabric slice is deliberately smaller than upstream
-WorldGuard:
+The Vantablack Fabric adaptation is a server-side Fabric-native protection
+runtime. It is not a Bukkit compatibility layer and does not load Bukkit
+WorldGuard plugins, but it ports the region, command, flag, WorldEdit-selection,
+and server-event behavior needed by the Vantablack server.
 
 - Server-only Fabric mod metadata.
-- Cuboid region model with per-dimension bounds.
-- Region priority, members, and explicit allow/deny/unset flags.
-- Local `regions.properties` persistence.
-- `/wg` and `/worldguard` admin commands.
+- Cuboid, polygonal 2D, and global region model with per-dimension bounds.
+- Region priority, owners, members, parent inheritance, and explicit
+  allow/deny/unset flags.
+- Local `regions.properties` persistence with schema versioning.
+- `/wg`, `/worldguard`, `/region`, and `/rg` admin commands.
+- Optional WorldEdit Fabric import for cuboid and polygonal selections.
 - Fabric event hooks for block break, block attack, block use/place attempts,
-  item use, entity use, and entity attack.
+  item use, entity use, entity attack, explosions, fire, fluids, pistons,
+  practical Enderman/Ravager grief, movement entry/exit, chat send, sleep, PvP,
+  fall damage, invincibility, item drop, and item pickup.
 
 ## Next Parity Work
 
@@ -32,15 +37,17 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 
 - Add a section or chunk spatial index before evaluating high-frequency movement
   or entity rules.
-- Add a WorldEdit Fabric bridge for `//wand` or selected-region import.
-- Add mixins for explosions, fire spread, fluid flow, pistons, hoppers,
-  pressure plates, crop trampling, portals, item pickup/drop, mob griefing, and
-  entity spawning.
-- Add more flags: `chest-access`, `pvp`, `entry`, `exit`, `tnt`, `creeper-
-  explosion`, `fire-spread`, `water-flow`, `lava-flow`, `mob-spawning`, and
-  `mob-grief`.
-- Add migration tooling only after deciding whether to reuse LGPL
-  `worldguard-core` or keep a Vantablack-native storage model.
+- Add group resolution against the configured permission provider.
+- Add teleport-specific movement flags: `exit-via-teleport`, `enderpearl`, and
+  `chorus-fruit-teleport`.
+- Add recipient filtering for `receive-chat`.
+- Add remaining environmental hooks for portals, crop trampling,
+  hanging-entity destruction, lightning/weather, growth/decay, hoppers,
+  pressure plates, entity spawning, and dragon/wither non-explosion block
+  damage.
+- Add typed non-state flags and message-bearing greeting/farewell equivalents.
+- Add migration tooling if Vantablack later chooses to reuse LGPL
+  `worldguard-core` storage directly instead of the Fabric-native storage model.
 
 ## Reference Projects
 

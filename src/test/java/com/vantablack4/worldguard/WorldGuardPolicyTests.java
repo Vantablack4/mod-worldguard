@@ -116,4 +116,174 @@ final class WorldGuardPolicyTests {
 
         assertThat(decision.allowed()).isTrue();
     }
+
+    @Test
+    void denyWinsWhenEqualPriorityRegionsConflict() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion allow = new WorldGuardRegion(
+            "shop",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            5,
+            Set.of(),
+            Map.of(WorldGuardFlag.INTERACT, FlagState.ALLOW)
+        );
+        WorldGuardRegion deny = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            5,
+            Set.of(),
+            Map.of(WorldGuardFlag.INTERACT, FlagState.DENY)
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(allow, deny),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardFlag.INTERACT,
+            player,
+            false
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.regionId()).isEqualTo("spawn");
+    }
+
+    @Test
+    void childRegionsInheritParentFlags() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion parent = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            20,
+            20,
+            20,
+            3,
+            Set.of(),
+            Map.of(WorldGuardFlag.ITEM_USE, FlagState.DENY)
+        );
+        WorldGuardRegion child = new WorldGuardRegion(
+            "shop",
+            "minecraft:overworld",
+            2,
+            2,
+            2,
+            4,
+            4,
+            4,
+            3,
+            "spawn",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(parent, child),
+            "minecraft:overworld",
+            3,
+            3,
+            3,
+            WorldGuardFlag.ITEM_USE,
+            player,
+            false
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.regionId()).isEqualTo("shop");
+    }
+
+    @Test
+    void globalRegionsApplyAfterPhysicalRegions() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.INTERACT, FlagState.DENY);
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.INTERACT,
+            player,
+            false
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
+    void ownersInheritedFromParentsBypassMemberDeny() {
+        UUID owner = UUID.randomUUID();
+        WorldGuardRegion parent = new WorldGuardRegion(
+            "town",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            20,
+            20,
+            20,
+            2,
+            "",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(owner),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of(WorldGuardFlag.INTERACT, FlagState.DENY)
+        );
+        WorldGuardRegion child = new WorldGuardRegion(
+            "plot",
+            "minecraft:overworld",
+            1,
+            1,
+            1,
+            3,
+            3,
+            3,
+            2,
+            "town",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(parent, child),
+            "minecraft:overworld",
+            2,
+            2,
+            2,
+            WorldGuardFlag.INTERACT,
+            owner,
+            false
+        );
+
+        assertThat(decision.allowed()).isTrue();
+    }
 }

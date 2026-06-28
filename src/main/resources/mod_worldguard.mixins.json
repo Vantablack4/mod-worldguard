@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "package": "com.vantablack4.worldguard.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "EndermanLeaveBlockGoalMixin",
+    "EndermanTakeBlockGoalMixin",
+    "FireBlockMixin",
+    "FlowingFluidMixin",
+    "ItemEntityMixin",
+    "PistonBaseBlockMixin",
+    "RavagerMixin",
+    "ServerExplosionMixin",
+    "ServerGamePacketListenerImplMixin",
+    "ServerPlayerDropMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

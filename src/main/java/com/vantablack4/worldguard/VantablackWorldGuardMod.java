@@ -6,6 +6,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.vantablack4.worldguard.worldedit.WorldEditSelectionSource;
+
 public final class VantablackWorldGuardMod implements ModInitializer {
     public static final String MOD_ID = "mod_worldguard";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -21,6 +23,6 @@ public final class VantablackWorldGuardMod implements ModInitializer {
         WorldGuardStorage storage = WorldGuardStorage.load(config.configDirectory());
         WorldGuardService service = new WorldGuardService(config, storage);
         new WorldGuardHooks(service).register();
-        new WorldGuardCommands(config, storage).register();
+        new WorldGuardCommands(config, storage, WorldEditSelectionSource.load()).register();
     }
 }

@@ -1,6 +1,7 @@
 package com.vantablack4.worldguard;
 
-import java.util.Comparator;
+import com.vantablack4.worldguard.model.RegionQueryEngine;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -22,20 +23,18 @@ public final class WorldGuardPolicy {
             return ProtectionDecision.allow();
         }
 
-        List<WorldGuardRegion> matching = regions.stream()
-            .filter(region -> region.contains(world, x, y, z))
-            .sorted(Comparator.comparingInt(WorldGuardRegion::priority).reversed())
-            .toList();
+        RegionQueryEngine.FlagEvaluation evaluation = RegionQueryEngine.queryState(
+            regions,
+            world,
+            x,
+            y,
+            z,
+            flag,
+            playerUuid
+        );
 
-        for (WorldGuardRegion region : matching) {
-            FlagState state = region.flag(flag);
-            if (state == FlagState.UNSET) {
-                continue;
-            }
-            if (state == FlagState.ALLOW || region.member(playerUuid)) {
-                return ProtectionDecision.allow();
-            }
-            return ProtectionDecision.deny(region, flag);
+        if (evaluation.state() == FlagState.DENY) {
+            return ProtectionDecision.deny(evaluation.regionId(), flag);
         }
 
         return ProtectionDecision.allow();

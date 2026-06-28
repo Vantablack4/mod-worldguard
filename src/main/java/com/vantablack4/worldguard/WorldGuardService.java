@@ -8,8 +8,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.permissions.Permission;
-import net.minecraft.server.permissions.PermissionLevel;
 
 public final class WorldGuardService {
     private final WorldGuardConfig config;
@@ -26,12 +24,36 @@ public final class WorldGuardService {
     }
 
     public ProtectionDecision check(ServerPlayer player, WorldGuardFlag flag, String world, BlockPos pos) {
+        return checkAny(player, world, pos, flag);
+    }
+
+    public ProtectionDecision checkAny(ServerPlayer player, String world, BlockPos pos, WorldGuardFlag... flags) {
+        boolean bypass = isAdmin(player);
+        for (WorldGuardFlag flag : flags) {
+            ProtectionDecision decision = WorldGuardPolicy.evaluate(
+                storage.regions(),
+                world,
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                flag,
+                player.getUUID(),
+                bypass
+            );
+            if (!decision.allowed()) {
+                return decision;
+            }
+        }
+        return ProtectionDecision.allow();
+    }
+
+    public ProtectionDecision check(ServerPlayer player, WorldGuardFlag flag, String world, int x, int y, int z) {
         return WorldGuardPolicy.evaluate(
             storage.regions(),
             world,
-            pos.getX(),
-            pos.getY(),
-            pos.getZ(),
+            x,
+            y,
+            z,
             flag,
             player.getUUID(),
             isAdmin(player)
@@ -51,9 +73,7 @@ public final class WorldGuardService {
     }
 
     public boolean isAdmin(ServerPlayer player) {
-        return player.createCommandSourceStack().permissions().hasPermission(
-            new Permission.HasCommandLevel(PermissionLevel.byId(config.adminPermissionLevel()))
-        );
+        return WorldGuardPermissions.bypass(player.createCommandSourceStack(), config);
     }
 
     private void sendDenyMessage(ServerPlayer player, ProtectionDecision decision) {
