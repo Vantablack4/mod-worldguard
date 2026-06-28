@@ -164,11 +164,32 @@ final class WorldGuardStorageTests {
         );
         assertThat(region.contains("minecraft:overworld", 1, 10, 3)).isTrue();
         assertThat(region.contains("minecraft:overworld", -2, 10, 5)).isFalse();
-        assertThat(stored).contains("schema-version=3");
-        assertThat(stored).contains("region.claim.type=polygon");
-        assertThat(stored).contains("region.claim.min-x=-2");
-        assertThat(stored).contains("region.claim.max-z=5");
-        assertThat(stored).contains("region.claim.polygon-points=-2,1;4,1;4,5;0,5");
+        assertThat(stored).contains("schema-version=4");
+        assertThat(stored).contains(".id=claim");
+        assertThat(stored).contains(".type=polygon");
+        assertThat(stored).contains(".min-x=-2");
+        assertThat(stored).contains(".max-z=5");
+        assertThat(stored).contains(".polygon-points=-2,1;4,1;4,5;0,5");
+    }
+
+    @Test
+    void storesGlobalRegionsPerWorld() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.findOrCreateGlobal("minecraft:overworld");
+        storage.setFlag(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld", WorldGuardFlag.PVP, FlagState.DENY);
+        storage.findOrCreateGlobal("minecraft:the_nether");
+        storage.setFlag(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:the_nether", WorldGuardFlag.PVP, FlagState.ALLOW);
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld").orElseThrow()
+            .flag(WorldGuardFlag.PVP)).isEqualTo(FlagState.DENY);
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:the_nether").orElseThrow()
+            .flag(WorldGuardFlag.PVP)).isEqualTo(FlagState.ALLOW);
+
+        assertThat(reloaded.delete(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld")).isTrue();
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld")).isEmpty();
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:the_nether")).isPresent();
     }
 
     @Test

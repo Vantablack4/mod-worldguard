@@ -92,9 +92,12 @@ public final class RegionQueryEngine {
         WorldGuardFlag flag,
         UUID playerUuid
     ) {
-        Map<String, WorldGuardRegion> byId = byId(regions);
-        List<WorldGuardRegion> applicable = new ArrayList<>(applicableRegions(regions, world, x, y, z));
-        globalRegion(regions, world).ifPresent(applicable::add);
+        List<WorldGuardRegion> scoped = regions == null ? List.of() : regions.stream()
+            .filter(region -> region.appliesToWorld(world))
+            .toList();
+        Map<String, WorldGuardRegion> byId = byId(scoped);
+        List<WorldGuardRegion> applicable = new ArrayList<>(applicableRegions(scoped, world, x, y, z));
+        globalRegion(scoped, world).ifPresent(applicable::add);
 
         FlagEvaluation explicit = queryExplicitState(applicable, byId, flag, playerUuid);
         if (explicit.state() != FlagState.UNSET) {
@@ -228,10 +231,10 @@ public final class RegionQueryEngine {
             if (priority < minimumPriority) {
                 break;
             }
-            if (region.global() || ignoredParents.contains(region.id())) {
+            if (ignoredParents.contains(region.id())) {
                 continue;
             }
-            if (effectiveFlag(region, byId, WorldGuardFlag.PASSTHROUGH).state() == FlagState.ALLOW) {
+            if (passthroughAllows(region, byId)) {
                 continue;
             }
             minimumPriority = priority;
@@ -249,6 +252,15 @@ public final class RegionQueryEngine {
             }
         }
         return new FlagEvaluation(FlagState.ALLOW, counted.get(0).id(), counted.get(0).id());
+    }
+
+    private static boolean passthroughAllows(WorldGuardRegion region, Map<String, WorldGuardRegion> byId) {
+        FlagEvaluation passthrough = effectiveFlag(region, byId, WorldGuardFlag.PASSTHROUGH);
+        if (passthrough.state() != FlagState.UNSET) {
+            return passthrough.state() == FlagState.ALLOW;
+        }
+        return region.global() && region.owners().isEmpty() && region.members().isEmpty()
+            && region.ownerGroups().isEmpty() && region.memberGroups().isEmpty();
     }
 
     private static FlagEvaluation effectiveFlag(

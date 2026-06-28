@@ -12,7 +12,11 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.text.Normalizer;
+import java.text.Normalizer.Form;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -22,8 +26,13 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 public final class WorldGuardStorage {
+    private static final Pattern VALID_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_,'\\-\\+/]+$");
+    private static final String ID_SUFFIX = ".id";
+    private static final String WORLD_KEY_SEPARATOR = "~";
+
     private final Path regionsFile;
     private final Properties properties;
 
@@ -41,19 +50,42 @@ public final class WorldGuardStorage {
         return new WorldGuardStorage(configDirectory, loadProperties(configDirectory.resolve("regions.properties")));
     }
 
+    public synchronized void reload() {
+        properties.clear();
+        properties.putAll(loadProperties(regionsFile));
+    }
+
+    public synchronized void flush() {
+        saveProperties();
+    }
+
     public synchronized List<WorldGuardRegion> regions() {
-        List<WorldGuardRegion> regions = regionIds().stream()
-            .map(this::find)
+        List<WorldGuardRegion> regions = regionKeys().stream()
+            .map(this::parseRegionKey)
             .flatMap(Optional::stream)
             .toList();
         return RegionQueryEngine.sort(regions);
     }
 
+    public synchronized List<WorldGuardRegion> regions(String world) {
+        String normalizedWorld = normalizeWorld(world);
+        return RegionQueryEngine.sort(regions().stream()
+            .filter(region -> region.appliesToWorld(normalizedWorld))
+            .toList());
+    }
+
     public synchronized List<String> regionIds() {
-        return properties.stringPropertyNames().stream()
-            .filter(key -> key.startsWith(RegionStorageSchema.REGION_PREFIX) && key.endsWith(".id"))
-            .map(key -> properties.getProperty(key))
-            .map(WorldGuardStorage::normalizeId)
+        return regions().stream()
+            .map(WorldGuardRegion::id)
+            .filter(id -> !id.isBlank())
+            .distinct()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .toList();
+    }
+
+    public synchronized List<String> regionIds(String world) {
+        return regions(world).stream()
+            .map(WorldGuardRegion::id)
             .filter(id -> !id.isBlank())
             .distinct()
             .sorted(String.CASE_INSENSITIVE_ORDER)
@@ -65,15 +97,33 @@ public final class WorldGuardStorage {
         if (id.isBlank()) {
             return Optional.empty();
         }
-        return parseRegion(id);
+        return regions().stream()
+            .filter(region -> region.id().equals(id))
+            .sorted(Comparator.comparing(WorldGuardRegion::world, String.CASE_INSENSITIVE_ORDER))
+            .findFirst();
+    }
+
+    public synchronized Optional<WorldGuardRegion> find(String rawId, String world) {
+        String id = normalizeId(rawId);
+        String normalizedWorld = normalizeWorld(world);
+        if (id.isBlank()) {
+            return Optional.empty();
+        }
+        return regions().stream()
+            .filter(region -> region.id().equals(id))
+            .filter(region -> region.appliesToWorld(normalizedWorld))
+            .sorted(Comparator
+                .comparing((WorldGuardRegion region) -> region.world().equals(normalizedWorld) ? 0 : 1)
+                .thenComparing(WorldGuardRegion::world, String.CASE_INSENSITIVE_ORDER))
+            .findFirst();
     }
 
     public synchronized List<WorldGuardRegion> regionsAt(String world, int x, int y, int z) {
-        return RegionQueryEngine.applicableRegions(regions(), world, x, y, z);
+        return RegionQueryEngine.applicableRegions(regions(world), normalizeWorld(world), x, y, z);
     }
 
     public synchronized void save(WorldGuardRegion region) {
-        removeRegion(region.id());
+        removeRegion(region.id(), region.world());
         writeRegion(region);
         saveProperties();
     }
@@ -82,7 +132,18 @@ public final class WorldGuardStorage {
         String id = normalizeId(rawId);
         boolean removed = removeRegion(id);
         if (removed) {
-            clearDanglingParents(id);
+            clearDanglingParents(id, null);
+            saveProperties();
+        }
+        return removed;
+    }
+
+    public synchronized boolean delete(String rawId, String world) {
+        String id = normalizeId(rawId);
+        String normalizedWorld = normalizeWorld(world);
+        boolean removed = removeRegion(id, normalizedWorld);
+        if (removed) {
+            clearDanglingParents(id, normalizedWorld);
             saveProperties();
         }
         return removed;
@@ -90,6 +151,13 @@ public final class WorldGuardStorage {
 
     public synchronized Optional<WorldGuardRegion> setFlag(String rawId, WorldGuardFlag flag, FlagState state) {
         Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlag(flag, state));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setFlag(String rawId, String world, WorldGuardFlag flag, FlagState state) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlag(flag, state));
         updated.ifPresent(this::save);
         return updated;
@@ -111,8 +179,32 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> setParent(String rawId, String world, String rawParentId) {
+        String parentId = normalizeId(rawParentId);
+        String normalizedWorld = normalizeWorld(world);
+        if (!parentId.isBlank() && find(parentId, normalizedWorld).isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<WorldGuardRegion> existing = find(rawId, normalizedWorld);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withParent(parentId));
+        updated.ifPresent(region -> {
+            if (RegionQueryEngine.circularParent(region, RegionQueryEngine.byId(regionsWith(region, normalizedWorld)))) {
+                throw new IllegalArgumentException("Circular region parent relationship for " + region.id());
+            }
+            save(region);
+        });
+        return updated;
+    }
+
     public synchronized Optional<WorldGuardRegion> addOwner(String rawId, UUID playerUuid) {
         Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withOwner(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> addOwner(String rawId, String world, UUID playerUuid) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withOwner(playerUuid));
         updated.ifPresent(this::save);
         return updated;
@@ -125,8 +217,22 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> removeOwner(String rawId, String world, UUID playerUuid) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutOwner(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
     public synchronized Optional<WorldGuardRegion> addMember(String rawId, UUID playerUuid) {
         Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withMember(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> addMember(String rawId, String world, UUID playerUuid) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withMember(playerUuid));
         updated.ifPresent(this::save);
         return updated;
@@ -139,6 +245,32 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> removeMember(String rawId, String world, UUID playerUuid) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutMember(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized WorldGuardRegion findOrCreateGlobal(String world) {
+        String normalizedWorld = normalizeWorld(world);
+        WorldGuardRegion region = regions().stream()
+            .filter(candidate -> candidate.global())
+            .filter(candidate -> candidate.world().equals(normalizedWorld))
+            .findFirst()
+            .orElseGet(() -> WorldGuardRegion.global(normalizedWorld));
+        save(region);
+        return region;
+    }
+
+    public static boolean validRegionId(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String trimmed = raw.trim();
+        return !trimmed.isBlank() && VALID_ID_PATTERN.matcher(trimmed).matches();
+    }
+
     public static String normalizeId(String raw) {
         if (raw == null) {
             return "";
@@ -147,19 +279,27 @@ public final class WorldGuardStorage {
         if (trimmed.equalsIgnoreCase(WorldGuardRegion.GLOBAL_REGION_ID)) {
             return WorldGuardRegion.GLOBAL_REGION_ID;
         }
-        String normalized = trimmed.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "_");
-        while (normalized.contains("__")) {
-            normalized = normalized.replace("__", "_");
+        if (!validRegionId(trimmed)) {
+            return "";
         }
-        return normalized.replaceAll("^_+|_+$", "");
+        return Normalizer.normalize(trimmed.toLowerCase(Locale.ROOT), Form.NFC);
     }
 
-    private Optional<WorldGuardRegion> parseRegion(String id) {
-        String prefix = prefix(id);
+    public static String normalizeWorld(String rawWorld) {
+        if (rawWorld == null || rawWorld.isBlank()) {
+            return WorldGuardRegion.ANY_WORLD;
+        }
+        return rawWorld.trim();
+    }
+
+    private Optional<WorldGuardRegion> parseRegionKey(String regionKey) {
+        String prefix = prefix(regionKey);
+        String id = normalizeId(properties.getProperty(prefix + "id"));
         String world = properties.getProperty(prefix + "world");
-        if (world == null || world.isBlank()) {
+        if (id.isBlank() || world == null || world.isBlank()) {
             return Optional.empty();
         }
+        world = normalizeWorld(world);
         try {
             EnumMap<WorldGuardFlag, FlagState> flags = parseFlags(prefix);
             RegionType type = RegionType.parse(properties.getProperty(prefix + "type")).orElse(RegionType.CUBOID);
@@ -206,7 +346,7 @@ public final class WorldGuardStorage {
     }
 
     private void writeRegion(WorldGuardRegion region) {
-        String prefix = prefix(region.id());
+        String prefix = prefix(regionKey(region));
         properties.setProperty(RegionStorageSchema.SCHEMA_VERSION_KEY, Integer.toString(RegionStorageSchema.CURRENT_VERSION));
         properties.setProperty(prefix + "id", region.id());
         properties.setProperty(prefix + "world", region.world());
@@ -249,7 +389,35 @@ public final class WorldGuardStorage {
         if (id.isBlank()) {
             return false;
         }
-        String prefix = prefix(id);
+        boolean removed = false;
+        for (String regionKey : regionKeys()) {
+            Optional<WorldGuardRegion> region = parseRegionKey(regionKey);
+            if (region.isPresent() && region.get().id().equals(id)) {
+                removed |= removeRegionKey(regionKey);
+            }
+        }
+        return removed;
+    }
+
+    private boolean removeRegion(String id, String world) {
+        if (id.isBlank()) {
+            return false;
+        }
+        String normalizedWorld = normalizeWorld(world);
+        boolean removed = false;
+        for (String regionKey : regionKeys()) {
+            Optional<WorldGuardRegion> region = parseRegionKey(regionKey);
+            if (region.isPresent()
+                && region.get().id().equals(id)
+                && region.get().world().equals(normalizedWorld)) {
+                removed |= removeRegionKey(regionKey);
+            }
+        }
+        return removed;
+    }
+
+    private boolean removeRegionKey(String regionKey) {
+        String prefix = prefix(regionKey);
         List<String> keys = new ArrayList<>(properties.stringPropertyNames().stream()
             .filter(key -> key.startsWith(prefix))
             .toList());
@@ -257,11 +425,14 @@ public final class WorldGuardStorage {
         return !keys.isEmpty();
     }
 
-    private void clearDanglingParents(String removedId) {
-        for (String regionId : regionIds()) {
-            String parentKey = prefix(regionId) + "parent";
-            if (normalizeId(properties.getProperty(parentKey)).equals(removedId)) {
-                properties.remove(parentKey);
+    private void clearDanglingParents(String removedId, String world) {
+        String normalizedWorld = world == null ? null : normalizeWorld(world);
+        for (String regionKey : regionKeys()) {
+            Optional<WorldGuardRegion> region = parseRegionKey(regionKey);
+            if (region.isPresent()
+                && (normalizedWorld == null || region.get().world().equals(normalizedWorld))
+                && region.get().parentId().equals(removedId)) {
+                properties.remove(prefix(regionKey) + "parent");
             }
         }
     }
@@ -272,6 +443,38 @@ public final class WorldGuardStorage {
             updated.add(region.id().equals(replacement.id()) ? replacement : region);
         }
         return updated;
+    }
+
+    private List<WorldGuardRegion> regionsWith(WorldGuardRegion replacement, String world) {
+        List<WorldGuardRegion> updated = new ArrayList<>();
+        for (WorldGuardRegion region : regions(world)) {
+            if (region.id().equals(replacement.id()) && region.world().equals(replacement.world())) {
+                updated.add(replacement);
+            } else {
+                updated.add(region);
+            }
+        }
+        return updated;
+    }
+
+    private List<String> regionKeys() {
+        return properties.stringPropertyNames().stream()
+            .filter(key -> key.startsWith(RegionStorageSchema.REGION_PREFIX) && key.endsWith(ID_SUFFIX))
+            .map(key -> key.substring(
+                RegionStorageSchema.REGION_PREFIX.length(),
+                key.length() - ID_SUFFIX.length()
+            ))
+            .distinct()
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .toList();
+    }
+
+    private static String regionKey(WorldGuardRegion region) {
+        return Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(region.world().getBytes(StandardCharsets.UTF_8))
+            + WORLD_KEY_SEPARATOR
+            + region.id();
     }
 
     private int integer(String key, int fallback) {

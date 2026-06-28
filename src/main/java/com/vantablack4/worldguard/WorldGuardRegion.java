@@ -92,13 +92,9 @@ public record WorldGuardRegion(
         if (flags != null) {
             copiedFlags.putAll(flags);
         }
-        RegionType normalizedType = type;
         copiedFlags.entrySet().removeIf(entry ->
             entry.getValue() == null
                 || entry.getValue() == FlagState.UNSET
-                || normalizedType == RegionType.GLOBAL
-                    && entry.getKey().preventsAllowOnGlobal()
-                    && entry.getValue() == FlagState.ALLOW
         );
         flags = Collections.unmodifiableMap(copiedFlags);
     }
@@ -228,7 +224,7 @@ public record WorldGuardRegion(
             0,
             0,
             0,
-            Integer.MIN_VALUE,
+            0,
             "",
             RegionType.GLOBAL,
             Set.of(),
@@ -302,7 +298,7 @@ public record WorldGuardRegion(
     public WorldGuardRegion withOwner(UUID playerUuid) {
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(owners);
         updated.add(playerUuid);
-        return copy(parentId, type, updated, members, ownerGroups, memberGroups, flags);
+        return copy(parentId, type, updated, members, ownerGroups, memberGroups, flagsForGlobalMembership(flags));
     }
 
     public WorldGuardRegion withoutOwner(UUID playerUuid) {
@@ -314,7 +310,7 @@ public record WorldGuardRegion(
     public WorldGuardRegion withMember(UUID playerUuid) {
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.add(playerUuid);
-        return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flags);
+        return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flagsForGlobalMembership(flags));
     }
 
     public WorldGuardRegion withoutMember(UUID playerUuid) {
@@ -325,13 +321,23 @@ public record WorldGuardRegion(
 
     public String boundsDisplay() {
         if (global()) {
-            return world + " global";
+            return world + " " + minX + " " + minY + " " + minZ + " -> " + maxX + " " + maxY + " " + maxZ;
         }
         if (type == RegionType.POLYGON) {
             return world + " polygon points=" + polygonPoints.size() + " y=" + minY + " -> " + maxY
                 + " bounds " + minX + " " + minZ + " -> " + maxX + " " + maxZ;
         }
         return world + " " + minX + " " + minY + " " + minZ + " -> " + maxX + " " + maxY + " " + maxZ;
+    }
+
+    private Map<WorldGuardFlag, FlagState> flagsForGlobalMembership(Map<WorldGuardFlag, FlagState> currentFlags) {
+        if (!global() || currentFlags.containsKey(WorldGuardFlag.PASSTHROUGH)) {
+            return currentFlags;
+        }
+        EnumMap<WorldGuardFlag, FlagState> updated = new EnumMap<>(WorldGuardFlag.class);
+        updated.putAll(currentFlags);
+        updated.put(WorldGuardFlag.PASSTHROUGH, FlagState.DENY);
+        return updated;
     }
 
     private WorldGuardRegion copy(

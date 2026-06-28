@@ -18,7 +18,7 @@ Included in the Fabric port:
 - Cuboid regions stored per dimension.
 - Cuboid, polygonal 2D, and global regions stored per dimension.
 - Region priority, owners, members, parent inheritance, and explicit state flags.
-- `/wg`, `/worldguard`, `/region`, and `/rg` commands.
+- `/wg`, `/worldguard`, `/region`, `/regions`, and `/rg` commands.
 - Protection hooks for block break, block attack, block use/place attempts,
   item use, entity use, entity attack, explosions, fire spread, fluid flow,
   pistons, Enderman/Ravager grief, movement entry/exit, chat send, sleep, PvP,
@@ -44,45 +44,47 @@ Not included yet:
 
 ```text
 /wg
-/wg status
-/wg save
-/wg list
-/wg here
-/wg info <region>
-/wg global [world]
-/wg global create [world]
-/wg global flag <flag> [allow|deny|unset]
-/wg define <region>
-/wg define <region> selection [priority]
-/wg define __global__ [world]
-/wg define <region> <x1> <y1> <z1> <x2> <y2> <z2> [priority]
-/wg delete <region>
-/wg remove <region>
-/wg flags
-/wg flag <region> <flag> [allow|deny|unset]
-/wg setpriority <region> <priority>
-/wg setparent <region> [parent]
-/wg parent set <region> <parent>
-/wg parent clear <region>
-/wg owner add <region> <player>
-/wg owner remove <region> <player>
-/wg member add <region> <player>
-/wg member remove <region> <player>
-/rg addowner <region> <player>
-/rg removeowner <region> <player>
-/rg remowner <region> <player>
-/rg addmember <region> <player>
-/rg removemember <region> <player>
-/rg remmember <region> <player>
+/wg version
+/wg reload
+/region list
+/region info [region]
+/region i [region]
+/region define <region>
+/region define <region> selection [priority]
+/region define <region> <x1> <y1> <z1> <x2> <y2> <z2> [priority]
+/region redefine <region>
+/region remove <region>
+/region flags <region>
+/region flag <region> <flag> [allow|deny|unset]
+/region setpriority <region> <priority>
+/region setparent <region> [parent]
+/region addowner <region> <player>
+/region removeowner <region> <player>
+/region addmember <region> <player>
+/region removemember <region> <player>
+/region load
+/region save
 ```
 
-`/worldguard`, `/region`, and `/rg` are registered as aliases. Mutating commands
-require `mod_worldguard:admin`, falling back to the configured admin permission
-level. Protection bypass checks `mod_worldguard:bypass`, also falling back to the
-configured admin permission level.
+`/worldguard` is an alias of `/wg`. `/regions` and `/rg` are aliases of
+`/region`. Region command aliases follow upstream WorldGuard where implemented:
+`define`, `def`, `d`, `create`; `redefine`, `update`, `move`; `remove`,
+`delete`, `del`, `rem`; `flag`, `f`; `setpriority`, `priority`, `pri`;
+`setparent`, `parent`, `par`; `addmember`, `addmem`, `am`; `addowner`, `ao`;
+`removemember`, `remmember`, `removemem`, `remmem`, `rm`; and `removeowner`,
+`remowner`, `ro`.
 
-When WorldEdit is installed, `/wg define <region>` imports the executing
-player's complete WorldEdit cuboid or polygonal selection. `/wg define <region>
+The special `__global__` region is created lazily by commands that allow it,
+including `info`, `flag`, `flags`, `remove`, and owner/member updates. It is
+rejected by commands that define or reshape physical regions, set priority, or
+set parents, matching upstream WorldGuard behavior.
+
+Mutating commands require `mod_worldguard:admin`, falling back to the configured
+admin permission level. Protection bypass checks `mod_worldguard:bypass`, also
+falling back to the configured admin permission level.
+
+When WorldEdit is installed, `/region define <region>` imports the executing
+player's complete WorldEdit cuboid or polygonal selection. `/region define <region>
 selection [priority]` is the explicit selection form when a non-zero priority is
 needed. WorldEdit is a soft integration: the mod remains loadable without it,
 and explicit-coordinate definitions continue to work.

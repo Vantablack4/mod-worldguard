@@ -31,7 +31,7 @@ public final class WorldGuardService {
         boolean bypass = isAdmin(player);
         for (WorldGuardFlag flag : flags) {
             ProtectionDecision decision = WorldGuardPolicy.evaluate(
-                storage.regions(),
+                storage.regions(world),
                 world,
                 pos.getX(),
                 pos.getY(),
@@ -49,7 +49,7 @@ public final class WorldGuardService {
 
     public ProtectionDecision check(ServerPlayer player, WorldGuardFlag flag, String world, int x, int y, int z) {
         return WorldGuardPolicy.evaluate(
-            storage.regions(),
+            storage.regions(world),
             world,
             x,
             y,

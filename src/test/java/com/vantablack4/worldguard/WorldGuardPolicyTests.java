@@ -234,6 +234,92 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void blankGlobalRegionDoesNotDenyMembershipDefaultBuild() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld");
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            player,
+            false
+        );
+
+        assertThat(decision.allowed()).isTrue();
+    }
+
+    @Test
+    void globalRegionMembersMakeMembershipDefaultsApplyEverywhere() {
+        UUID member = UUID.randomUUID();
+        UUID outsider = UUID.randomUUID();
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withMember(member);
+
+        ProtectionDecision memberDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            member,
+            false
+        );
+        ProtectionDecision outsiderDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            outsider,
+            false
+        );
+
+        assertThat(memberDecision.allowed()).isTrue();
+        assertThat(outsiderDecision.allowed()).isFalse();
+        assertThat(outsiderDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
+    void globalBuildAllowIsIgnoredButDenyStillApplies() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion buildAllow = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.BUILD, FlagState.ALLOW);
+        WorldGuardRegion buildDeny = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.BUILD, FlagState.DENY);
+
+        ProtectionDecision allowDecision = WorldGuardPolicy.evaluate(
+            List.of(buildAllow),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            player,
+            false
+        );
+        ProtectionDecision denyDecision = WorldGuardPolicy.evaluate(
+            List.of(buildDeny),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            player,
+            false
+        );
+
+        assertThat(allowDecision.allowed()).isTrue();
+        assertThat(denyDecision.allowed()).isFalse();
+        assertThat(denyDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
     void ownersInheritedFromParentsBypassMemberDeny() {
         UUID owner = UUID.randomUUID();
         WorldGuardRegion parent = new WorldGuardRegion(

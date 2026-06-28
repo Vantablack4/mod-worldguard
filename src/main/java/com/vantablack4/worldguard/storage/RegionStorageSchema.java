@@ -5,7 +5,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 public final class RegionStorageSchema {
-    public static final int CURRENT_VERSION = 3;
+    public static final int CURRENT_VERSION = 4;
     public static final String SCHEMA_VERSION_KEY = "schema-version";
     public static final String REGION_PREFIX = "region.";
     public static final String POLYGON_POINTS_KEY = "polygon-points";
@@ -13,8 +13,8 @@ public final class RegionStorageSchema {
     private RegionStorageSchema() {
     }
 
-    public static String prefix(String regionId) {
-        return REGION_PREFIX + regionId + ".";
+    public static String prefix(String regionKey) {
+        return REGION_PREFIX + regionKey + ".";
     }
 
     public static String csv(Collection<?> values) {

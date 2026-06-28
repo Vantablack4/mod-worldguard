@@ -1,6 +1,7 @@
 package com.vantablack4.worldguard;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
@@ -16,7 +17,7 @@ final class WorldGuardRegionTests {
     @Test
     void normalizesBoundsAndIds() {
         WorldGuardRegion region = new WorldGuardRegion(
-            " Spawn Area! ",
+            " Spawn_Area ",
             "minecraft:overworld",
             10,
             90,
@@ -36,6 +37,24 @@ final class WorldGuardRegionTests {
         assertThat(region.maxY()).isEqualTo(90);
         assertThat(region.contains("minecraft:overworld", 0, 70, 0)).isTrue();
         assertThat(region.contains("minecraft:the_nether", 0, 70, 0)).isFalse();
+    }
+
+    @Test
+    void rejectsIdsWorldGuardDoesNotAccept() {
+        assertThatThrownBy(() -> new WorldGuardRegion(
+            " Spawn Area! ",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            0,
+            Set.of(),
+            Map.of()
+        )).isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Region id is required");
     }
 
     @Test
