@@ -94,7 +94,8 @@ final class WorldGuardSessionRuntime {
         for (WorldGuardSessionMessage message : WorldGuardSessionRules.messagesForTransition(
             service.storage().regions(),
             previous,
-            current
+            current,
+            player.getScoreboardName()
         )) {
             player.sendSystemMessage(Component.literal(message.message()).withStyle(ChatFormatting.YELLOW));
         }

@@ -21,6 +21,6 @@ public record ProtectionDecision(
         if (allowed) {
             return "";
         }
-        return "Protected region '" + regionId + "' denies " + flag.id() + ".";
+        return WorldGuardText.denyMessage(flag);
     }
 }

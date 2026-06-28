@@ -152,6 +152,15 @@ public final class WorldGuardSessionRules {
         WorldGuardSessionSnapshot previous,
         WorldGuardSessionSnapshot current
     ) {
+        return messagesForTransition(regions, previous, current, "");
+    }
+
+    public static List<WorldGuardSessionMessage> messagesForTransition(
+        Collection<WorldGuardRegion> regions,
+        WorldGuardSessionSnapshot previous,
+        WorldGuardSessionSnapshot current,
+        String playerName
+    ) {
         if (previous == null || current == null) {
             return List.of();
         }
@@ -162,27 +171,37 @@ public final class WorldGuardSessionRules {
         Set<String> currentIds = new HashSet<>(current.regionIds());
         boolean sameWorld = previous.world().equals(current.world());
         List<WorldGuardSessionMessage> messages = new ArrayList<>();
+        String name = playerName == null ? "" : playerName;
 
+        boolean leftNotifyRegion = false;
         for (String regionId : previous.regionIds()) {
             if ((!sameWorld || !currentIds.contains(regionId))
                 && notifyEnabled(byId.get(regionId), byId, WorldGuardFlag.NOTIFY_LEAVE)) {
-                messages.add(new WorldGuardSessionMessage(
-                    WorldGuardFlag.NOTIFY_LEAVE,
-                    regionId,
-                    "Left protected region '" + regionId + "'."
-                ));
+                leftNotifyRegion = true;
+                break;
             }
         }
+        if (leftNotifyRegion) {
+            messages.add(new WorldGuardSessionMessage(
+                WorldGuardFlag.NOTIFY_LEAVE,
+                "",
+                name + " left NOTIFY region"
+            ));
+        }
 
+        List<String> entered = new ArrayList<>();
         for (String regionId : current.regionIds()) {
             if ((!sameWorld || !previousIds.contains(regionId))
                 && notifyEnabled(byId.get(regionId), byId, WorldGuardFlag.NOTIFY_ENTER)) {
-                messages.add(new WorldGuardSessionMessage(
-                    WorldGuardFlag.NOTIFY_ENTER,
-                    regionId,
-                    "Entered protected region '" + regionId + "'."
-                ));
+                entered.add(regionId);
             }
+        }
+        if (!entered.isEmpty()) {
+            messages.add(new WorldGuardSessionMessage(
+                WorldGuardFlag.NOTIFY_ENTER,
+                String.join(", ", entered),
+                name + " entered NOTIFY region: " + String.join(", ", entered)
+            ));
         }
 
         return List.copyOf(messages);

@@ -134,7 +134,7 @@ public final class WorldGuardCommands {
                 .requires(this::isAdmin)
                 .then(regionArgument().executes(this::delete)))
             .then(Commands.literal("flags")
-                .executes(this::flags)
+                .executes(this::flagsHere)
                 .then(regionArgument().executes(this::regionFlags)))
             .then(Commands.literal("flag")
                 .requires(this::isAdmin)
@@ -240,19 +240,19 @@ public final class WorldGuardCommands {
 
     private int reloadConfiguration(CommandContext<CommandSourceStack> context) {
         storage.reload();
-        context.getSource().sendSystemMessage(success("WorldGuard configuration reloaded."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.configurationReloaded()));
         return 1;
     }
 
     private int saveRegions(CommandContext<CommandSourceStack> context) {
         storage.flush();
-        context.getSource().sendSystemMessage(success("Successfully saved the region data for all worlds."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.regionsSavedAllWorlds()));
         return 1;
     }
 
     private int loadRegions(CommandContext<CommandSourceStack> context) {
         storage.reload();
-        context.getSource().sendSystemMessage(success("Successfully load the region data for all worlds."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.regionsLoadedAllWorlds()));
         return 1;
     }
 
@@ -264,17 +264,20 @@ public final class WorldGuardCommands {
             context.getSource().sendSystemMessage(error("No regions are defined."));
             return 0;
         }
-        for (WorldGuardRegion region : regions) {
-            context.getSource().sendSystemMessage(line(
-                region.id(),
-                region.world() + " priority=" + region.priority() + " members=" + region.members().size()
-            ));
+        for (int index = 0; index < regions.size(); index++) {
+            WorldGuardRegion region = regions.get(index);
+            context.getSource().sendSystemMessage(Component.literal((index + 1) + ". ")
+                .withStyle(ChatFormatting.LIGHT_PURPLE)
+                .append(Component.literal(region.id()).withStyle(ChatFormatting.GOLD)));
         }
         return regions.size();
     }
 
     private int infoHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        ServerPlayer player = context.getSource().getPlayerOrException();
+        ServerPlayer player = playerOrMessage(context, WorldGuardText.specifyInfoRegion());
+        if (player == null) {
+            return 0;
+        }
         List<WorldGuardRegion> regions = storage.regionsAt(
             worldId(player),
             player.blockPosition().getX(),
@@ -286,7 +289,7 @@ public final class WorldGuardCommands {
             return sendInfo(context, global);
         }
         if (regions.size() > 1) {
-            context.getSource().sendSystemMessage(error("You're standing in several regions (please pick one)."));
+            context.getSource().sendSystemMessage(error(WorldGuardText.multipleStandingRegions()));
             return 0;
         }
         return sendInfo(context, regions.getFirst());
@@ -332,7 +335,7 @@ public final class WorldGuardCommands {
             priority
         );
         storage.save(region);
-        context.getSource().sendSystemMessage(success("A new region has been made named '" + id + "'."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.createdRegion(id)));
         return 1;
     }
 
@@ -352,7 +355,7 @@ public final class WorldGuardCommands {
         WorldEditRegionSelection selection = result.selection();
         WorldGuardRegion region = selection.toDefaultProtectedRegion(id, priority);
         storage.save(region);
-        context.getSource().sendSystemMessage(success("A new region has been made named '" + id + "'."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.createdRegion(id)));
         return 1;
     }
 
@@ -377,7 +380,7 @@ public final class WorldGuardCommands {
 
         WorldGuardRegion replacement = withShape(existing, result.selection());
         storage.save(replacement);
-        context.getSource().sendSystemMessage(success("Region '" + replacement.id() + "' has been updated with a new area."));
+        context.getSource().sendSystemMessage(success(WorldGuardText.updatedRegionArea(replacement.id())));
         return 1;
     }
 
@@ -394,31 +397,46 @@ public final class WorldGuardCommands {
             return 0;
         }
         if (storage.delete(id, world)) {
-            context.getSource().sendSystemMessage(success("Successfully removed " + id + "."));
+            context.getSource().sendSystemMessage(success(WorldGuardText.removedRegions(id)));
             return 1;
         }
         noRegion(context, id);
         return 0;
     }
 
-    private int flags(CommandContext<CommandSourceStack> context) {
-        context.getSource().sendSystemMessage(header("Available flags"));
-        for (WorldGuardFlag flag : WorldGuardFlag.values()) {
-            context.getSource().sendSystemMessage(line(flag.id(), "allow | deny | unset"));
+    private int flagsHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = playerOrMessage(context, WorldGuardText.specifyFlagsRegion());
+        if (player == null) {
+            return 0;
         }
-        return WorldGuardFlag.values().length;
+        List<WorldGuardRegion> regions = storage.regionsAt(
+            worldId(player),
+            player.blockPosition().getX(),
+            player.blockPosition().getY(),
+            player.blockPosition().getZ()
+        );
+        if (regions.isEmpty()) {
+            return sendRegionFlags(context, storage.findOrCreateGlobal(worldId(player)));
+        }
+        if (regions.size() > 1) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.multipleStandingRegions()));
+            return 0;
+        }
+        return sendRegionFlags(context, regions.getFirst());
     }
 
     private int regionFlags(CommandContext<CommandSourceStack> context) {
         return findExistingRegion(context, getString(context, ID_ARGUMENT), true)
-            .map(region -> {
-                context.getSource().sendSystemMessage(header("Flags for " + region.id()));
-                for (WorldGuardFlag flag : WorldGuardFlag.values()) {
-                    context.getSource().sendSystemMessage(line(flag.id(), region.flag(flag).id()));
-                }
-                return 1;
-            })
+            .map(region -> sendRegionFlags(context, region))
             .orElse(0);
+    }
+
+    private int sendRegionFlags(CommandContext<CommandSourceStack> context, WorldGuardRegion region) {
+        context.getSource().sendSystemMessage(header("Flags for " + region.id()));
+        for (WorldGuardFlag flag : WorldGuardFlag.values()) {
+            context.getSource().sendSystemMessage(line(flag.id(), region.flag(flag).id()));
+        }
+        return 1;
     }
 
     private int setFlag(CommandContext<CommandSourceStack> context) {
@@ -428,7 +446,7 @@ public final class WorldGuardCommands {
     private int setRegionFlag(CommandContext<CommandSourceStack> context, String rawId) {
         WorldGuardFlag flag = WorldGuardFlag.parse(getString(context, FLAG_ARGUMENT)).orElse(null);
         if (flag == null) {
-            context.getSource().sendSystemMessage(error("Unknown flag specified: " + getString(context, FLAG_ARGUMENT)));
+            sendUnknownFlag(context, getString(context, FLAG_ARGUMENT));
             return 0;
         }
         String id = checkRegionId(context, rawId, true);
@@ -444,17 +462,15 @@ public final class WorldGuardCommands {
         }
         FlagState state = FlagState.parse(getString(context, STATE_ARGUMENT)).orElse(null);
         if (state == null) {
-            context.getSource().sendSystemMessage(error("Invalid flag value: " + getString(context, STATE_ARGUMENT)));
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidStateFlag(getString(context, STATE_ARGUMENT))));
             return 0;
         }
         return storage.setFlag(id, world, flag, state)
             .map(region -> {
                 if (state == FlagState.UNSET) {
-                    context.getSource().sendSystemMessage(success("Region flag " + flag.id()
-                        + " removed from '" + region.id() + "'. (Any -g(roups) were also removed.)"));
+                    context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(flag.id(), region.id())));
                 } else {
-                    context.getSource().sendSystemMessage(success("Region flag " + flag.id()
-                        + " set on '" + region.id() + "' to '" + state.id() + "'."));
+                    context.getSource().sendSystemMessage(success(WorldGuardText.flagSet(flag.id(), region.id(), state.id())));
                 }
                 return 1;
             })
@@ -467,7 +483,7 @@ public final class WorldGuardCommands {
     private int clearRegionFlag(CommandContext<CommandSourceStack> context) {
         WorldGuardFlag flag = WorldGuardFlag.parse(getString(context, FLAG_ARGUMENT)).orElse(null);
         if (flag == null) {
-            context.getSource().sendSystemMessage(error("Unknown flag specified: " + getString(context, FLAG_ARGUMENT)));
+            sendUnknownFlag(context, getString(context, FLAG_ARGUMENT));
             return 0;
         }
         String id = checkRegionId(context, getString(context, ID_ARGUMENT), true);
@@ -483,8 +499,7 @@ public final class WorldGuardCommands {
         }
         return storage.setFlag(id, world, flag, FlagState.UNSET)
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Region flag " + flag.id()
-                    + " removed from '" + region.id() + "'. (Any -g(roups) were also removed.)"));
+                context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(flag.id(), region.id())));
                 return 1;
             })
             .orElse(0);
@@ -501,8 +516,7 @@ public final class WorldGuardCommands {
             .map(region -> {
                 WorldGuardRegion updated = copyWithPriority(region, priority);
                 storage.save(updated);
-                context.getSource().sendSystemMessage(success("Priority of '" + updated.id()
-                    + "' set to " + priority + " (higher numbers override)."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.prioritySet(updated.id(), priority)));
                 return 1;
             })
             .orElseGet(() -> {
@@ -529,7 +543,7 @@ public final class WorldGuardCommands {
         try {
             return storage.setParent(id, world, parentId)
                 .map(region -> {
-                    context.getSource().sendSystemMessage(success("Inheritance set for region '" + region.id() + "'."));
+                    context.getSource().sendSystemMessage(success(WorldGuardText.inheritanceSet(region.id())));
                     return 1;
                 })
                 .orElseGet(() -> {
@@ -550,8 +564,7 @@ public final class WorldGuardCommands {
         String world = commandWorld(context);
         return storage.setParent(id, world, "")
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Inheritance set for region '" + region.id()
-                    + "'. Region is now orphaned."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.inheritanceCleared(region.id())));
                 return 1;
             })
             .orElseGet(() -> {
@@ -569,7 +582,7 @@ public final class WorldGuardCommands {
         String world = commandWorld(context);
         return storage.addOwner(id, world, player.getUUID())
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Region '" + region.id() + "' updated with new owners."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.ownersAdded(region.id())));
                 return 1;
             })
             .orElseGet(() -> {
@@ -587,7 +600,7 @@ public final class WorldGuardCommands {
         String world = commandWorld(context);
         return storage.removeOwner(id, world, player.getUUID())
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Region '" + region.id() + "' updated with owners removed."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.ownersRemoved(region.id())));
                 return 1;
             })
             .orElseGet(() -> {
@@ -605,7 +618,7 @@ public final class WorldGuardCommands {
         String world = commandWorld(context);
         return storage.addMember(id, world, player.getUUID())
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Region '" + region.id() + "' updated with new members."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.membersAdded(region.id())));
                 return 1;
             })
             .orElseGet(() -> {
@@ -623,7 +636,7 @@ public final class WorldGuardCommands {
         String world = commandWorld(context);
         return storage.removeMember(id, world, player.getUUID())
             .map(region -> {
-                context.getSource().sendSystemMessage(success("Region '" + region.id() + "' updated with members removed."));
+                context.getSource().sendSystemMessage(success(WorldGuardText.membersRemoved(region.id())));
                 return 1;
             })
             .orElseGet(() -> {
@@ -716,13 +729,12 @@ public final class WorldGuardCommands {
 
     private String checkRegionId(CommandContext<CommandSourceStack> context, String rawId, boolean allowGlobal) {
         if (!WorldGuardStorage.validRegionId(rawId)) {
-            context.getSource().sendSystemMessage(error("The region name of '" + rawId
-                + "' contains characters that are not allowed."));
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidRegionId(rawId)));
             return "";
         }
         String id = WorldGuardStorage.normalizeId(rawId);
         if (!allowGlobal && id.equals(WorldGuardRegion.GLOBAL_REGION_ID)) {
-            context.getSource().sendSystemMessage(error("Sorry, you can't use __global__ here."));
+            context.getSource().sendSystemMessage(error(WorldGuardText.globalNotAllowed()));
             return "";
         }
         return id;
@@ -766,7 +778,7 @@ public final class WorldGuardCommands {
     }
 
     private void noRegion(CommandContext<CommandSourceStack> context, String id) {
-        context.getSource().sendSystemMessage(error("No region could be found with the name of '" + id + "'."));
+        context.getSource().sendSystemMessage(error(WorldGuardText.noRegion(id)));
     }
 
     private String commandWorld(CommandContext<CommandSourceStack> context) {
@@ -782,6 +794,19 @@ public final class WorldGuardCommands {
         List<WorldGuardRegion> global = regions.stream().filter(WorldGuardRegion::global).toList();
         List<WorldGuardRegion> local = regions.stream().filter(region -> !region.global()).toList();
         return java.util.stream.Stream.concat(global.stream(), local.stream()).toList();
+    }
+
+    private ServerPlayer playerOrMessage(CommandContext<CommandSourceStack> context, String message) throws CommandSyntaxException {
+        if (context.getSource().isPlayer()) {
+            return context.getSource().getPlayerOrException();
+        }
+        context.getSource().sendSystemMessage(error(message));
+        return null;
+    }
+
+    private void sendUnknownFlag(CommandContext<CommandSourceStack> context, String flag) {
+        context.getSource().sendSystemMessage(error(WorldGuardText.unknownFlag(flag)));
+        context.getSource().sendSystemMessage(error(WorldGuardText.availableFlags()));
     }
 
     private static String flagsDisplay(WorldGuardRegion region) {

@@ -92,12 +92,12 @@ final class WorldGuardSessionRulesTests {
             new BlockPos(1, 5, 5)
         );
 
-        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), outside, inside))
+        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), outside, inside, "Steve"))
             .extracting(WorldGuardSessionMessage::message)
-            .containsExactly("Entered protected region 'spawn'.");
-        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), inside, outside))
+            .containsExactly("Steve entered NOTIFY region: spawn");
+        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), inside, outside, "Steve"))
             .extracting(WorldGuardSessionMessage::message)
-            .containsExactly("Left protected region 'spawn'.");
+            .containsExactly("Steve left NOTIFY region");
     }
 
     @Test
