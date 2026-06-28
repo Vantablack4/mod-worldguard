@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "mod_worldguard",
+  "version": "${version}",
+  "name": "Vantablack WorldGuard",
+  "description": "Server-side Fabric region protection port for Vantablack.",
+  "authors": ["Vantablack4", "EngineHub contributors"],
+  "contact": {
+    "homepage": "https://github.com/Vantablack4/mod-worldguard",
+    "sources": "https://github.com/EngineHub/WorldGuard"
+  },
+  "license": "LGPL-3.0-or-later",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["com.vantablack4.worldguard.VantablackWorldGuardMod"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.2",
+    "minecraft": "26.1.2",
+    "fabric-api": "*"
+  }
+}
