@@ -39,7 +39,8 @@ and server-event behavior needed by the Vantablack server.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
   flags.
 - Runtime typed flag effects for greeting/farewell messages, custom deny
-  messages, blocked/allowed player commands, game mode, and heal/feed.
+  messages, blocked/allowed player commands, game mode, heal/feed, deny-spawn,
+  and region teleport/spawn/teleport-message command targets.
 
 ## Next Parity Work
 
@@ -55,7 +56,7 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Continue command parity work for upstream flags/options that Brigadier does
   not expose yet: `-w`, `-n`, and list paging/filtering.
 - Wire remaining typed non-state flags into runtime behavior for weather/time
-  lock and teleport/spawn values.
+  lock and respawn handling for the spawn location flag.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
 

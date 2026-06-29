@@ -7,6 +7,10 @@ import com.mojang.brigadier.tree.CommandNode;
 
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionSource;
+import com.vantablack4.worldguard.worldedit.WorldEditRegionSelection;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
@@ -83,6 +87,68 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("owner")).isNull();
             assertThat(root.getChild("member")).isNull();
         }
+    }
+
+    @Test
+    void teleportCommandRegistersUpstreamFlagSpawnAndCenterForms() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir, 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+
+        commands.register(dispatcher);
+
+        for (String alias : List.of("teleport", "tp")) {
+            CommandNode<CommandSourceStack> teleport = root(dispatcher, "rg").getChild(alias);
+            assertThat(teleport.getChild("region")).as(alias + " region").isNotNull();
+            assertThat(teleport.getChild("-s").getChild("region")).as(alias + " -s").isNotNull();
+            assertThat(teleport.getChild("-c").getChild("region")).as(alias + " -c").isNotNull();
+            assertThat(teleport.getChild("region").getChild("-s")).as(alias + " misplaced -s").isNull();
+            assertThat(teleport.getChild("region").getChild("-c")).as(alias + " misplaced -c").isNull();
+        }
+    }
+
+    @Test
+    void regionCommandCopiesPreserveTypedFlagsAndGroups() {
+        WorldGuardFlagValue teleport = WorldGuardFlagValue.location(
+            "minecraft:overworld",
+            1,
+            64,
+            2,
+            90,
+            0
+        ).orElseThrow();
+        WorldGuardRegion region = WorldGuardRegion.defaultProtected(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            5,
+            5,
+            5,
+            0
+        ).withValue(WorldGuardValueFlag.TELEPORT, teleport)
+            .withFlagGroup(WorldGuardValueFlag.TELEPORT, WorldGuardRegionGroup.OWNERS);
+
+        WorldGuardRegion reprioritized = WorldGuardCommands.copyWithPriority(region, 7);
+        assertThat(reprioritized.priority()).isEqualTo(7);
+        assertThat(reprioritized.value(WorldGuardValueFlag.TELEPORT)).contains(teleport);
+        assertThat(reprioritized.flagGroup(WorldGuardValueFlag.TELEPORT)).isEqualTo(WorldGuardRegionGroup.OWNERS);
+
+        WorldGuardRegion reshaped = WorldGuardCommands.withShape(
+            region,
+            new WorldEditRegionSelection("minecraft:overworld", 10, 11, 12, 20, 21, 22)
+        );
+        assertThat(reshaped.minX()).isEqualTo(10);
+        assertThat(reshaped.maxZ()).isEqualTo(22);
+        assertThat(reshaped.value(WorldGuardValueFlag.TELEPORT)).contains(teleport);
+        assertThat(reshaped.flagGroup(WorldGuardValueFlag.TELEPORT)).isEqualTo(WorldGuardRegionGroup.OWNERS);
     }
 
     @Test

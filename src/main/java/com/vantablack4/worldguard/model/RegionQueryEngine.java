@@ -173,6 +173,22 @@ public final class RegionQueryEngine {
             .orElseGet(ValueEvaluation::unset);
     }
 
+    public static ValueEvaluation queryRegionValue(
+        Collection<WorldGuardRegion> regions,
+        WorldGuardRegion region,
+        WorldGuardValueFlag flag,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
+        if (region == null || flag == null) {
+            return ValueEvaluation.unset();
+        }
+        List<WorldGuardRegion> scoped = regions == null ? List.of() : regions.stream()
+            .filter(candidate -> candidate.appliesToWorld(region.world()))
+            .toList();
+        return effectiveValue(region, byId(scoped), flag, playerUuid, playerGroups);
+    }
+
     public static boolean owner(WorldGuardRegion region, Map<String, WorldGuardRegion> byId, UUID playerUuid) {
         return owner(region, byId, playerUuid, Set.of());
     }

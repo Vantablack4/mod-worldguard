@@ -36,12 +36,15 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue.LocationValue;
 import com.vantablack4.worldguard.flag.WorldGuardFlagType;
 import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
 import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+import com.vantablack4.worldguard.model.RegionQueryEngine;
 import com.vantablack4.worldguard.worldedit.WorldEditRegionSelection;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionSource;
@@ -187,10 +190,8 @@ public final class WorldGuardCommands {
             .then(Commands.literal("rem")
                 .requires(source -> mayRegion(source, "remove"))
                 .then(regionArgument().executes(this::delete)))
-            .then(Commands.literal("teleport")
-                .then(regionArgument().executes(this::teleport)))
-            .then(Commands.literal("tp")
-                .then(regionArgument().executes(this::teleport)))
+            .then(teleportCommand("teleport"))
+            .then(teleportCommand("tp"))
             .then(Commands.literal("flags")
                 .executes(this::flagsHere)
                 .then(regionArgument().executes(this::regionFlags)))
@@ -535,7 +536,7 @@ public final class WorldGuardCommands {
         return 0;
     }
 
-    private int teleport(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private int teleport(CommandContext<CommandSourceStack> context, TeleportMode mode) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         String id = checkRegionId(context, getString(context, ID_ARGUMENT), false);
         if (id.isBlank()) {
@@ -548,19 +549,32 @@ public final class WorldGuardCommands {
         }
 
         WorldGuardRegion region = existing.get();
-        ServerLevel targetLevel = level(context, region.world());
-        if (targetLevel == null) {
-            context.getSource().sendSystemMessage(error(WorldGuardText.worldNotLoaded(region.world())));
+        Optional<LocationValue> location = teleportLocation(context, player, region, mode);
+        if (location.isEmpty()) {
             return 0;
         }
 
-        double x = center(region.minX(), region.maxX());
-        double y = center(region.minY(), region.maxY());
-        double z = center(region.minZ(), region.maxZ());
-        if (!player.teleportTo(targetLevel, x, y, z, Set.of(), player.getYRot(), player.getXRot(), true)) {
+        LocationValue target = location.get();
+        ServerLevel targetLevel = level(context, target.world());
+        if (targetLevel == null) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.worldNotLoaded(target.world())));
             return 0;
         }
-        context.getSource().sendSystemMessage(success(WorldGuardText.teleportedToRegion(region.id())));
+
+        if (!player.teleportTo(
+            targetLevel,
+            target.x(),
+            target.y(),
+            target.z(),
+            Set.of(),
+            target.yaw(),
+            target.pitch(),
+            true
+        )) {
+            return 0;
+        }
+        teleportMessage(player, region)
+            .ifPresent(message -> context.getSource().sendSystemMessage(success(message)));
         return 1;
     }
 
@@ -1084,6 +1098,15 @@ public final class WorldGuardCommands {
         return Commands.argument(argumentName, StringArgumentType.word()).suggests(this::suggestRegions);
     }
 
+    private LiteralArgumentBuilder<CommandSourceStack> teleportCommand(String name) {
+        return Commands.literal(name)
+            .then(regionArgument().executes(context -> teleport(context, TeleportMode.FLAG)))
+            .then(Commands.literal("-s")
+                .then(regionArgument().executes(context -> teleport(context, TeleportMode.SPAWN))))
+            .then(Commands.literal("-c")
+                .then(regionArgument().executes(context -> teleport(context, TeleportMode.CENTER))));
+    }
+
     private RequiredArgumentBuilder<CommandSourceStack, String> domainRegionArguments(Command<CommandSourceStack> command) {
         return regionArgument()
             .then(Commands.argument(DOMAIN_ARGUMENT, StringArgumentType.greedyString())
@@ -1442,7 +1465,71 @@ public final class WorldGuardCommands {
         return ((double) min + (double) max) / 2.0D + 0.5D;
     }
 
-    private static WorldGuardRegion copyWithPriority(WorldGuardRegion region, int priority) {
+    private Optional<LocationValue> teleportLocation(
+        CommandContext<CommandSourceStack> context,
+        ServerPlayer player,
+        WorldGuardRegion region,
+        TeleportMode mode
+    ) {
+        if (mode == TeleportMode.CENTER) {
+            if (!region.type().physicalArea()) {
+                context.getSource().sendSystemMessage(error(WorldGuardText.noCenterPoint()));
+                return Optional.empty();
+            }
+            if (player.gameMode() != GameType.SPECTATOR) {
+                context.getSource().sendSystemMessage(error(WorldGuardText.centerTeleportSpectatorOnly()));
+                return Optional.empty();
+            }
+            return Optional.of(new LocationValue(
+                region.world(),
+                center(region.minX(), region.maxX()),
+                center(region.minY(), region.maxY()),
+                center(region.minZ(), region.maxZ()),
+                0F,
+                0F
+            ));
+        }
+
+        WorldGuardValueFlag flag = mode == TeleportMode.SPAWN
+            ? WorldGuardValueFlag.SPAWN
+            : WorldGuardValueFlag.TELEPORT;
+        List<WorldGuardRegion> regions = storage.regions(region.world());
+        Set<String> groups = WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions);
+        Optional<LocationValue> location = RegionQueryEngine.queryRegionValue(
+            regions,
+            region,
+            flag,
+            player.getUUID(),
+            groups
+        ).value().flatMap(WorldGuardFlagValue::asLocation);
+        if (location.isPresent()) {
+            return location;
+        }
+
+        context.getSource().sendSystemMessage(error(
+            mode == TeleportMode.SPAWN ? WorldGuardText.noSpawnPoint() : WorldGuardText.noTeleportPoint()
+        ));
+        return Optional.empty();
+    }
+
+    private Optional<String> teleportMessage(ServerPlayer player, WorldGuardRegion region) {
+        List<WorldGuardRegion> regions = storage.regions(region.world());
+        Set<String> groups = WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions);
+        String message = RegionQueryEngine.queryRegionValue(
+            regions,
+            region,
+            WorldGuardValueFlag.TELEPORT_MESSAGE,
+            player.getUUID(),
+            groups
+        ).value()
+            .or(() -> WorldGuardValueFlag.TELEPORT_MESSAGE.defaultValue())
+            .map(WorldGuardFlagValue::serialized)
+            .orElseGet(() -> WorldGuardText.teleportedToRegion(region.id()));
+        message = message.replace("%id%", region.id());
+        return message.isEmpty() ? Optional.empty() : Optional.of(message);
+    }
+
+    static WorldGuardRegion copyWithPriority(WorldGuardRegion region, int priority) {
         return new WorldGuardRegion(
             region.id(),
             region.world(),
@@ -1460,11 +1547,13 @@ public final class WorldGuardCommands {
             region.ownerGroups(),
             region.memberGroups(),
             region.flags(),
+            region.valueFlags(),
+            region.flagGroups(),
             region.polygonPoints()
         );
     }
 
-    private static WorldGuardRegion withShape(WorldGuardRegion existing, WorldEditRegionSelection selection) {
+    static WorldGuardRegion withShape(WorldGuardRegion existing, WorldEditRegionSelection selection) {
         return new WorldGuardRegion(
             existing.id(),
             selection.world(),
@@ -1482,6 +1571,8 @@ public final class WorldGuardCommands {
             existing.ownerGroups(),
             existing.memberGroups(),
             existing.flags(),
+            existing.valueFlags(),
+            existing.flagGroups(),
             selection.polygonPoints()
         );
     }
@@ -1517,5 +1608,11 @@ public final class WorldGuardCommands {
     }
 
     private record GroupTarget(boolean present, WorldGuardRegionGroup group, boolean invalid) {
+    }
+
+    private enum TeleportMode {
+        FLAG,
+        SPAWN,
+        CENTER
     }
 }

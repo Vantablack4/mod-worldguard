@@ -637,6 +637,60 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void regionScopedValuesUseParentInheritanceWithoutCoordinateLookup() {
+        WorldGuardFlagValue teleport = WorldGuardFlagValue.location("minecraft:overworld", 12, 70, -4, 180, 10)
+            .orElseThrow();
+        WorldGuardRegion parent = new WorldGuardRegion(
+            "town",
+            "minecraft:overworld",
+            100,
+            0,
+            100,
+            120,
+            20,
+            120,
+            5,
+            "",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        ).withValue(WorldGuardValueFlag.TELEPORT, teleport);
+        WorldGuardRegion child = new WorldGuardRegion(
+            "plot",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            10,
+            "town",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
+
+        RegionQueryEngine.ValueEvaluation evaluation = RegionQueryEngine.queryRegionValue(
+            List.of(parent, child),
+            child,
+            WorldGuardValueFlag.TELEPORT,
+            UUID.randomUUID(),
+            Set.of()
+        );
+
+        assertThat(evaluation.value()).contains(teleport);
+        assertThat(evaluation.regionId()).isEqualTo("plot");
+        assertThat(evaluation.sourceRegionId()).isEqualTo("town");
+    }
+
+    @Test
     void typedValueFlagGroupsUseRegionAssociation() {
         UUID owner = UUID.randomUUID();
         UUID outsider = UUID.randomUUID();

@@ -36,6 +36,9 @@ Included in the Fabric port:
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
   `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
   `game-mode`, and heal/feed flags.
+- Region teleport command effects for `teleport`, `spawn`, and
+  `teleport-message`, including upstream-style `/region teleport <region>`,
+  `/region teleport -s <region>`, and `/region teleport -c <region>` forms.
 - Fabric permission API integration for `mod_worldguard:admin` and
   `mod_worldguard:bypass`, upstream-style `worldguard:region.*` command/bypass
   permission aliases, plus region group matching through
@@ -49,8 +52,8 @@ Included in the Fabric port:
 Not included yet:
 
 - Full WorldGuard Bukkit API compatibility.
-- Runtime effects for `weather-lock`, `time-lock`, `teleport`, `spawn`, and
-  `teleport-message`.
+- Runtime effects for `weather-lock`, `time-lock`, and respawn handling for the
+  `spawn` location flag.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags:
   `-w`, `-n`, and list paging/filtering.
@@ -73,7 +76,11 @@ Not included yet:
 /region redefine <region>
 /region select [region]
 /region teleport <region>
+/region teleport -s <region>
+/region teleport -c <region>
 /region tp <region>
+/region tp -s <region>
+/region tp -c <region>
 /region remove <region>
 /region flags <region>
 /region flag <region> <flag> [allow|deny|unset]
@@ -197,6 +204,8 @@ such as `teleport`, `spawn`, `teleport-message`, `deny-message`, `greeting`,
 `time-lock`, `game-mode`, heal/feed options, and per-flag region groups.
 `/region flag` edits both state flags and typed flags. Clearing a flag with no
 value also clears that flag's explicit `-g` group, matching upstream WorldGuard.
+`deny-spawn` blocks matching namespaced or short entity ids, for example
+`minecraft:zombie` or `zombie`.
 
 ## Configuration
 

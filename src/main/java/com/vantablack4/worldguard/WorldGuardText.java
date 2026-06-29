@@ -53,7 +53,23 @@ final class WorldGuardText {
     }
 
     static String teleportedToRegion(String id) {
-        return "Teleported you to the '" + id + "' region.";
+        return "Teleported you to the region '" + id + "'.";
+    }
+
+    static String noTeleportPoint() {
+        return "The region has no teleport point associated.";
+    }
+
+    static String noSpawnPoint() {
+        return "The region has no spawn point associated.";
+    }
+
+    static String noCenterPoint() {
+        return "The region has no center point.";
+    }
+
+    static String centerTeleportSpectatorOnly() {
+        return "Center teleport is only available in Spectator gamemode.";
     }
 
     static String regionSelected(String typeName) {

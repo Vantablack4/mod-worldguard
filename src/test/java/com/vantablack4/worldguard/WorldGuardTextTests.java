@@ -31,7 +31,15 @@ final class WorldGuardTextTests {
         assertThat(WorldGuardText.removedRegions("spawn"))
             .isEqualTo("Successfully removed spawn.");
         assertThat(WorldGuardText.teleportedToRegion("spawn"))
-            .isEqualTo("Teleported you to the 'spawn' region.");
+            .isEqualTo("Teleported you to the region 'spawn'.");
+        assertThat(WorldGuardText.noTeleportPoint())
+            .isEqualTo("The region has no teleport point associated.");
+        assertThat(WorldGuardText.noSpawnPoint())
+            .isEqualTo("The region has no spawn point associated.");
+        assertThat(WorldGuardText.noCenterPoint())
+            .isEqualTo("The region has no center point.");
+        assertThat(WorldGuardText.centerTeleportSpectatorOnly())
+            .isEqualTo("Center teleport is only available in Spectator gamemode.");
         assertThat(WorldGuardText.regionSelected("cuboid"))
             .isEqualTo("Region selected as cuboid");
         assertThat(WorldGuardText.worldNotLoaded("minecraft:missing"))

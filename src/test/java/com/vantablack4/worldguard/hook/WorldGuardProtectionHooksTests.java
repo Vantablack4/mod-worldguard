@@ -22,6 +22,8 @@ import net.minecraft.world.level.material.Fluids;
 import com.vantablack4.worldguard.FlagState;
 import com.vantablack4.worldguard.WorldGuardFlag;
 import com.vantablack4.worldguard.WorldGuardRegion;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 final class WorldGuardProtectionHooksTests {
     @Test
@@ -61,6 +63,44 @@ final class WorldGuardProtectionHooksTests {
         assertThat(WorldGuardProtectionHooks.mobSpawningCategory(MobCategory.MONSTER)).isTrue();
         assertThat(WorldGuardProtectionHooks.mobSpawningCategory(MobCategory.WATER_AMBIENT)).isTrue();
         assertThat(WorldGuardProtectionHooks.mobSpawningCategory(MobCategory.MISC)).isFalse();
+    }
+
+    @Test
+    void denySpawnMatchesNamespacedAndShortEntityIds() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
+        assertThat(WorldGuardProtectionHooks.denySpawnMatches(Set.of("minecraft:zombie"), EntityType.ZOMBIE))
+            .isTrue();
+        assertThat(WorldGuardProtectionHooks.denySpawnMatches(Set.of("zombie"), EntityType.ZOMBIE))
+            .isTrue();
+        assertThat(WorldGuardProtectionHooks.denySpawnMatches(Set.of("minecraft:cow"), EntityType.ZOMBIE))
+            .isFalse();
+    }
+
+    @Test
+    void globalDenySpawnBlocksMatchingEntityTypeOnly() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withValue(
+                WorldGuardValueFlag.DENY_SPAWN,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.DENY_SPAWN, "minecraft:zombie").orElseThrow()
+            );
+
+        assertThat(WorldGuardProtectionHooks.deniesMobSpawn(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            EntityType.ZOMBIE
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesMobSpawn(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            EntityType.COW
+        )).isFalse();
     }
 
     @Test

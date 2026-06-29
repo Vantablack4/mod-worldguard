@@ -3,9 +3,11 @@ package com.vantablack4.worldguard.hook;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -41,6 +43,8 @@ import com.vantablack4.worldguard.WorldGuardFlag;
 import com.vantablack4.worldguard.WorldGuardPolicy;
 import com.vantablack4.worldguard.WorldGuardRegion;
 import com.vantablack4.worldguard.WorldGuardService;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+import com.vantablack4.worldguard.model.RegionQueryEngine;
 import com.vantablack4.worldguard.session.WorldGuardSessionHooks;
 
 public final class WorldGuardProtectionHooks {
@@ -126,7 +130,43 @@ public final class WorldGuardProtectionHooks {
         if (!mobSpawningCategory(entity.getType().getCategory())) {
             return false;
         }
-        return deniesAny(level, entity.blockPosition(), WorldGuardFlag.MOB_SPAWNING);
+        WorldGuardService activeService = service;
+        BlockPos pos = entity.blockPosition();
+        String world = worldId(level);
+        List<WorldGuardRegion> regions = activeService.storage().regions(world);
+        return deniesMobSpawn(regions, world, pos, entity.getType())
+            || deniesAny(regions, world, pos, WorldGuardFlag.MOB_SPAWNING);
+    }
+
+    static boolean deniesMobSpawn(
+        List<WorldGuardRegion> regions,
+        String world,
+        BlockPos pos,
+        EntityType<?> entityType
+    ) {
+        if (regions == null || world == null || pos == null || entityType == null) {
+            return false;
+        }
+        Set<String> denied = RegionQueryEngine.queryValue(
+            regions,
+            world,
+            pos.getX(),
+            pos.getY(),
+            pos.getZ(),
+            WorldGuardValueFlag.DENY_SPAWN,
+            null
+        ).value().map(value -> value.asSet()).orElse(Set.of());
+        return denySpawnMatches(denied, entityType);
+    }
+
+    static boolean denySpawnMatches(Set<String> deniedTypes, EntityType<?> entityType) {
+        if (deniedTypes == null || deniedTypes.isEmpty() || entityType == null) {
+            return false;
+        }
+        String id = BuiltInRegistries.ENTITY_TYPE.getKey(entityType).toString();
+        int namespaceSeparator = id.indexOf(':');
+        String path = namespaceSeparator >= 0 ? id.substring(namespaceSeparator + 1) : id;
+        return deniedTypes.contains(id) || deniedTypes.contains(path);
     }
 
     public static boolean deniesNonLivingDamage(Entity victim, DamageSource source) {
