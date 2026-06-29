@@ -4,6 +4,7 @@ import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -15,6 +16,8 @@ import java.util.concurrent.CompletableFuture;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.StringReader;
+import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -96,6 +99,8 @@ public final class WorldGuardCommands {
         "noone",
         "deny"
     );
+    private static final SimpleCommandExceptionType WORLD_EXPECTED =
+        new SimpleCommandExceptionType(Component.literal("Expected world"));
     private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
         new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
@@ -335,8 +340,7 @@ public final class WorldGuardCommands {
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> listWorldFlag(int flags) {
-        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
-            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
             .suggests(this::suggestWorlds)
             .executes(this::list);
         appendListOptions(world, flags | LIST_WORLD_FLAG);
@@ -1373,8 +1377,7 @@ public final class WorldGuardCommands {
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> infoWorldFlag(int options) {
-        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
-            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
             .suggests(this::suggestWorlds);
         world.then(infoRegionArgument(options));
         if ((options & INFO_UUID_FLAG) == 0) {
@@ -1417,8 +1420,7 @@ public final class WorldGuardCommands {
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> flagsWorldFlag() {
-        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
-            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
             .suggests(this::suggestWorlds);
         world.then(flagsRegionArgument());
         world.then(Commands.literal("-p")
@@ -1428,7 +1430,17 @@ public final class WorldGuardCommands {
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, String> removeRegionArgument(RemoveMode mode) {
-        return regionArgument().executes(context -> delete(context, mode));
+        return removeRegionArgument(mode, false);
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> removeRegionArgument(
+        RemoveMode mode,
+        boolean worldUsed
+    ) {
+        RequiredArgumentBuilder<CommandSourceStack, String> region = regionArgument()
+            .executes(context -> delete(context, mode));
+        addTrailingRemoveOptions(region, mode, worldUsed);
+        return region;
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> removeModeFlag(
@@ -1436,27 +1448,95 @@ public final class WorldGuardCommands {
         RemoveMode mode,
         String conflictingFlag
     ) {
-        return Commands.literal(flag)
-            .then(removeRegionArgument(mode))
-            .then(worldFlag(removeRegionArgument(mode)))
-            .then(Commands.literal(conflictingFlag)
-                .then(removeRegionArgument(RemoveMode.CONFLICT))
-                .then(worldFlag(removeRegionArgument(RemoveMode.CONFLICT))));
+        return removeModeFlag(flag, mode, conflictingFlag, false);
     }
 
-    private LiteralArgumentBuilder<CommandSourceStack> worldRemoveFlag() {
-        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
-            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
-            .suggests(this::suggestWorlds);
-        world.then(removeRegionArgument(RemoveMode.DEFAULT));
-        world.then(removeModeFlag("-f", RemoveMode.FORCE, "-u"));
-        world.then(removeModeFlag("-u", RemoveMode.UNSET_PARENT, "-f"));
+    private LiteralArgumentBuilder<CommandSourceStack> removeModeFlag(
+        String flag,
+        RemoveMode mode,
+        String conflictingFlag,
+        boolean worldUsed
+    ) {
+        LiteralArgumentBuilder<CommandSourceStack> modeFlag = Commands.literal(flag)
+            .then(removeRegionArgument(mode, worldUsed));
+        if (!worldUsed) {
+            modeFlag.then(removeWorldFlag(removeRegionArgument(mode, true)));
+        }
+
+        LiteralArgumentBuilder<CommandSourceStack> conflictFlag = Commands.literal(conflictingFlag)
+            .then(removeRegionArgument(RemoveMode.CONFLICT, worldUsed));
+        if (!worldUsed) {
+            conflictFlag.then(removeWorldFlag(removeRegionArgument(RemoveMode.CONFLICT, true)));
+        }
+        modeFlag.then(conflictFlag);
+        return modeFlag;
+    }
+
+    private void addTrailingRemoveOptions(
+        ArgumentBuilder<CommandSourceStack, ?> parent,
+        RemoveMode mode,
+        boolean worldUsed
+    ) {
+        if (!worldUsed) {
+            parent.then(trailingRemoveWorldFlag(mode));
+        }
+
+        switch (mode) {
+            case DEFAULT -> {
+                parent.then(trailingRemoveModeFlag("-f", RemoveMode.FORCE, worldUsed));
+                parent.then(trailingRemoveModeFlag("-u", RemoveMode.UNSET_PARENT, worldUsed));
+            }
+            case FORCE -> parent.then(trailingRemoveModeFlag("-u", RemoveMode.CONFLICT, worldUsed));
+            case UNSET_PARENT -> parent.then(trailingRemoveModeFlag("-f", RemoveMode.CONFLICT, worldUsed));
+            case CONFLICT -> {
+            }
+        }
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> trailingRemoveModeFlag(
+        String flag,
+        RemoveMode mode,
+        boolean worldUsed
+    ) {
+        LiteralArgumentBuilder<CommandSourceStack> modeFlag = Commands.literal(flag)
+            .executes(context -> delete(context, mode));
+        addTrailingRemoveOptions(modeFlag, mode, worldUsed);
+        return modeFlag;
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> trailingRemoveWorldFlag(RemoveMode mode) {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
+            .suggests(this::suggestWorlds)
+            .executes(context -> delete(context, mode));
+        addTrailingRemoveOptions(world, mode, true);
         return Commands.literal("-w").then(world);
     }
 
+    private LiteralArgumentBuilder<CommandSourceStack> removeWorldFlag(
+        ArgumentBuilder<CommandSourceStack, ?> child
+    ) {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
+            .suggests(this::suggestWorlds);
+        world.then(child);
+        return Commands.literal("-w")
+            .then(world);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> worldRemoveFlag() {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
+            .suggests(this::suggestWorlds);
+        world.then(removeRegionArgument(RemoveMode.DEFAULT, true));
+        world.then(removeModeFlag("-f", RemoveMode.FORCE, "-u", true));
+        world.then(removeModeFlag("-u", RemoveMode.UNSET_PARENT, "-f", true));
+        return Commands.literal("-w").then(world);
+    }
+
+    private static RequiredArgumentBuilder<CommandSourceStack, String> worldArgument() {
+        return Commands.argument(LIST_WORLD_ARGUMENT, WorldArgumentType.INSTANCE);
+    }
+
     private LiteralArgumentBuilder<CommandSourceStack> worldFlag(ArgumentBuilder<CommandSourceStack, ?> child) {
-        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
-            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+        RequiredArgumentBuilder<CommandSourceStack, String> world = worldArgument()
             .suggests(this::suggestWorlds);
         world.then(child);
         return Commands.literal("-w").then(world);
@@ -1918,6 +1998,30 @@ public final class WorldGuardCommands {
             }
         }
         return false;
+    }
+
+    private static final class WorldArgumentType implements ArgumentType<String> {
+        private static final WorldArgumentType INSTANCE = new WorldArgumentType();
+
+        @Override
+        public String parse(StringReader reader) throws CommandSyntaxException {
+            if (reader.canRead() && (reader.peek() == '"' || reader.peek() == '\'')) {
+                return reader.readString();
+            }
+            int start = reader.getCursor();
+            while (reader.canRead() && !Character.isWhitespace(reader.peek())) {
+                reader.skip();
+            }
+            if (reader.getCursor() == start) {
+                throw WORLD_EXPECTED.createWithContext(reader);
+            }
+            return reader.getString().substring(start, reader.getCursor());
+        }
+
+        @Override
+        public Collection<String> getExamples() {
+            return List.of("world", "minecraft:overworld", "*");
+        }
     }
 
     private static ListRelationship relationship(WorldGuardRegion region, UUID playerUuid) {

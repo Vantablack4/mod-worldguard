@@ -68,7 +68,8 @@ Not included yet:
 - Full WorldGuard Bukkit API compatibility.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags,
-  including WorldEdit define/claim `-w` forms and free-order switch parsing.
+  including WorldEdit define/claim `-w` forms. Free-order switch parsing is
+  implemented only for the command surfaces listed below.
 - Dispenser/dropper synthetic action simulation, lectern book-take protection,
   entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
   and mount/dismount mixin parity beyond the current direct-use ride checks.
@@ -115,6 +116,11 @@ Not included yet:
 /region remove -w <world> <region>
 /region remove -w <world> -f <region>
 /region remove -w <world> -u <region>
+/region remove <region> -f
+/region remove <region> -u
+/region remove <region> -w <world>
+/region remove <region> -w <world> -f
+/region remove <region> -f -w <world>
 /region flags <region>
 /region flags -p <page> <region>
 /region flags -w <world> <region>
@@ -161,7 +167,9 @@ including `info`, `flag`, `flags`, `remove`, and owner/member updates. It is
 rejected by commands that define or reshape physical regions, set priority, or
 set parents, matching upstream WorldGuard behavior.
 Existing-region commands that support `-w <world>` expect the world switch
-before the region argument, matching the Brigadier forms listed above.
+before the region argument, matching the Brigadier forms listed above. Remove
+commands also accept upstream-style trailing `-f`, `-u`, and `-w <world>`
+options in free order after the region argument.
 Default Bukkit-style world names are normalized for Fabric runtime checks:
 `world`/`overworld` map to `minecraft:overworld`, `world_nether`/`nether` map
 to `minecraft:the_nether`, and `world_the_end`/`end` map to

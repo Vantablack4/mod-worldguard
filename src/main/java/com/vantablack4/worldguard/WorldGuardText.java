@@ -1,7 +1,10 @@
 package com.vantablack4.worldguard;
 
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
+
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 final class WorldGuardText {
     private WorldGuardText() {
@@ -114,8 +117,10 @@ final class WorldGuardText {
     }
 
     static String availableFlags() {
-        return "Available flags: " + Arrays.stream(WorldGuardFlag.values())
-            .map(WorldGuardFlag::id)
+        List<String> flags = new ArrayList<>();
+        WorldGuardFlag.ids().forEach(flags::add);
+        WorldGuardValueFlag.ids().forEach(flags::add);
+        return "Available flags: " + flags.stream()
             .sorted(String.CASE_INSENSITIVE_ORDER)
             .collect(Collectors.joining(", "))
             + ", ";

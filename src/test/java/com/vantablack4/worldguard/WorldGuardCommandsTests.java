@@ -12,12 +12,15 @@ import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
 import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
+import net.fabricmc.fabric.api.permission.v1.PermissionContextOwner;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
@@ -171,6 +174,27 @@ final class WorldGuardCommandsTests {
                 assertThat(remove.getChild("-f").getChild("-w").getChild("world").getChild("region"))
                     .as(alias + " -f -w")
                     .isNotNull();
+                assertThat(remove.getChild("region").getChild("-f"))
+                    .as(alias + " region -f")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-u"))
+                    .as(alias + " region -u")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-w").getChild("world"))
+                    .as(alias + " region -w")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-f").getChild("-w").getChild("world"))
+                    .as(alias + " region -f -w")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-w").getChild("world").getChild("-f"))
+                    .as(alias + " region -w -f")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-f").getChild("-u"))
+                    .as(alias + " region -f -u")
+                    .isNotNull();
+                assertThat(remove.getChild("region").getChild("-u").getChild("-f"))
+                    .as(alias + " region -u -f")
+                    .isNotNull();
             }
             for (String alias : List.of("select", "sel", "s", "redefine", "update", "move")) {
                 assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region"))
@@ -229,6 +253,221 @@ final class WorldGuardCommandsTests {
             .anyMatch(message -> message.contains("Owner UUIDs"));
         assertThat(source.messages())
             .noneMatch(message -> message.contains("__global__"));
+    }
+
+    @Test
+    void removeTrailingForceRemovesDescendants() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("force"));
+        storage.save(region("parent", WorldGuardRegion.ANY_WORLD, 0, 0, 0, 10, 10, 10));
+        storage.save(region("child", WorldGuardRegion.ANY_WORLD, 1, 1, 1, 2, 2, 2).withParent("parent"));
+        storage.save(region("grandchild", WorldGuardRegion.ANY_WORLD, 1, 1, 1, 2, 2, 2).withParent("child"));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("force"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute("rg remove parent -f", commandSource(source));
+
+        assertThat(result).isEqualTo(1);
+        assertThat(storage.find("parent")).isEmpty();
+        assertThat(storage.find("child")).isEmpty();
+        assertThat(storage.find("grandchild")).isEmpty();
+        assertThat(source.messages()).contains("Successfully removed parent, child, grandchild.");
+    }
+
+    @Test
+    void removeTrailingUnsetUnsetsDirectChildrenAndKeepsDescendants() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("unset"));
+        storage.save(region("parent", WorldGuardRegion.ANY_WORLD, 0, 0, 0, 10, 10, 10));
+        storage.save(region("child", WorldGuardRegion.ANY_WORLD, 1, 1, 1, 2, 2, 2).withParent("parent"));
+        storage.save(region("grandchild", WorldGuardRegion.ANY_WORLD, 1, 1, 1, 2, 2, 2).withParent("child"));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("unset"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute("rg remove parent -u", commandSource(source));
+
+        assertThat(result).isEqualTo(1);
+        assertThat(storage.find("parent")).isEmpty();
+        assertThat(storage.find("child")).map(WorldGuardRegion::parentId).contains("");
+        assertThat(storage.find("grandchild")).map(WorldGuardRegion::parentId).contains("child");
+        assertThat(source.messages()).contains("Successfully removed parent.");
+    }
+
+    @Test
+    void removeTrailingDefaultStillRefusesChildRegions() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("default-refuse"));
+        storage.save(region("parent", "minecraft:overworld", 0, 0, 0, 10, 10, 10));
+        storage.save(region("child", "minecraft:overworld", 1, 1, 1, 2, 2, 2).withParent("parent"));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("default-refuse"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute("rg remove parent -w world", commandSource(source));
+
+        assertThat(result).isEqualTo(0);
+        assertThat(storage.find("parent")).isPresent();
+        assertThat(storage.find("child")).isPresent();
+        assertThat(source.messages())
+            .contains("The region 'parent' has child regions. Use -f to force removal of children "
+                + "or -u to unset the parent value of these children.");
+    }
+
+    @Test
+    void removeTrailingWorldSelectsTargetWorld() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("world"));
+        storage.save(region("parent", "minecraft:overworld", 0, 0, 0, 10, 10, 10));
+        storage.save(region("parent", "minecraft:the_nether", 0, 0, 0, 10, 10, 10));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("world"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute("rg remove parent -w world", commandSource(source));
+
+        assertThat(result).isEqualTo(1);
+        assertThat(storage.find("parent", "minecraft:overworld")).isEmpty();
+        assertThat(storage.find("parent", "minecraft:the_nether")).isPresent();
+        assertThat(source.messages()).contains("Successfully removed parent.");
+    }
+
+    @Test
+    void removeTrailingForceAndWorldCanBeMixedInEitherOrder() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        List<String> commandsToRun = List.of(
+            "rg remove parent -f -w world",
+            "rg remove parent -w world -f"
+        );
+        for (int index = 0; index < commandsToRun.size(); index++) {
+            String command = commandsToRun.get(index);
+            Path storagePath = tempDir.resolve("mixed-" + index);
+            CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+            WorldGuardStorage storage = WorldGuardStorage.load(storagePath);
+            storage.save(region("parent", "minecraft:overworld", 0, 0, 0, 10, 10, 10));
+            storage.save(region("child", "minecraft:overworld", 1, 1, 1, 2, 2, 2).withParent("parent"));
+            storage.save(region("parent", "minecraft:the_nether", 0, 0, 0, 10, 10, 10));
+            WorldGuardCommands commands = new WorldGuardCommands(
+                new WorldGuardConfig(storagePath, 2, 1000),
+                storage,
+                unavailableWorldEdit()
+            );
+            RecordingCommandSource source = new RecordingCommandSource();
+            commands.register(dispatcher);
+
+            int result = dispatcher.execute(command, commandSource(source));
+
+            assertThat(result).as(command).isEqualTo(1);
+            assertThat(storage.find("parent", "minecraft:overworld")).as(command).isEmpty();
+            assertThat(storage.find("child", "minecraft:overworld")).as(command).isEmpty();
+            assertThat(storage.find("parent", "minecraft:the_nether")).as(command).isPresent();
+            assertThat(source.messages()).as(command).contains("Successfully removed parent, child.");
+        }
+    }
+
+    @Test
+    void removeTrailingForceAndUnsetStillConflict() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("conflict"));
+        storage.save(region("parent", WorldGuardRegion.ANY_WORLD, 0, 0, 0, 10, 10, 10));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("conflict"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute("rg remove parent -f -u", commandSource(source));
+
+        assertThat(result).isEqualTo(0);
+        assertThat(storage.find("parent")).isPresent();
+        assertThat(source.messages())
+            .contains("You cannot use both -u (unset parent) and -f (remove children) together.");
+    }
+
+    @Test
+    void consoleGlobalFlagCommandsProtectConcreteWorldWhenExactGlobalAlreadyExists() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir.resolve("global-shadow"));
+        storage.findOrCreateGlobal("world");
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir.resolve("global-shadow"), 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int soilDry = dispatcher.execute("rg flag __global__ soil-dry deny", commandSource(source));
+        int trampling = dispatcher.execute("rg flag __global__ block-trampling deny", commandSource(source));
+
+        assertThat(soilDry).isEqualTo(1);
+        assertThat(trampling).isEqualTo(1);
+        assertThat(storage.find(WorldGuardRegion.GLOBAL_REGION_ID, WorldGuardRegion.ANY_WORLD)
+            .orElseThrow()
+            .flag(WorldGuardFlag.SOIL_DRY)).isEqualTo(FlagState.DENY);
+        assertThat(storage.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld")
+            .orElseThrow()
+            .flag(WorldGuardFlag.SOIL_DRY)).isEqualTo(FlagState.UNSET);
+        ProtectionDecision soilDryDecision = WorldGuardPolicy.evaluate(
+            storage.regions(),
+            "minecraft:overworld",
+            5,
+            64,
+            5,
+            WorldGuardFlag.SOIL_DRY,
+            null,
+            false
+        );
+        ProtectionDecision trampleDecision = WorldGuardPolicy.evaluateBuild(
+            storage.regions(),
+            "minecraft:overworld",
+            5,
+            64,
+            5,
+            UUID.randomUUID(),
+            List.of(),
+            false,
+            WorldGuardFlag.BUILD,
+            WorldGuardFlag.BLOCK_BREAK,
+            WorldGuardFlag.BLOCK_PLACE,
+            WorldGuardFlag.TRAMPLE_BLOCKS
+        );
+        assertThat(soilDryDecision.allowed()).isFalse();
+        assertThat(soilDryDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+        assertThat(trampleDecision.allowed()).isFalse();
+        assertThat(trampleDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
     }
 
     @Test
@@ -556,17 +795,37 @@ final class WorldGuardCommandsTests {
     }
 
     private static CommandSourceStack commandSource(CommandSource source) {
-        return new CommandSourceStack(
+        return new PermissiveCommandSourceStack(
             source,
             Vec3.ZERO,
             Vec2.ZERO,
-            null,
             PermissionSet.ALL_PERMISSIONS,
             "test",
-            Component.literal("test"),
-            null,
-            null
+            Component.literal("test")
         );
+    }
+
+    private static final class PermissiveCommandSourceStack extends CommandSourceStack implements PermissionContextOwner {
+        private PermissiveCommandSourceStack(
+            CommandSource source,
+            Vec3 worldPosition,
+            Vec2 rotation,
+            PermissionSet permissions,
+            String textName,
+            Component displayName
+        ) {
+            super(source, worldPosition, rotation, null, permissions, textName, displayName, null, null);
+        }
+
+        @Override
+        public boolean checkPermission(Identifier permission, boolean defaultValue) {
+            return true;
+        }
+
+        @Override
+        public boolean checkPermission(Identifier permission, PermissionLevel defaultValue) {
+            return true;
+        }
     }
 
     private static final class RecordingCommandSource implements CommandSource {

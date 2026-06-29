@@ -2,6 +2,12 @@ package com.vantablack4.worldguard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+
 import org.junit.jupiter.api.Test;
 
 final class WorldGuardTextTests {
@@ -117,9 +123,27 @@ final class WorldGuardTextTests {
 
     @Test
     void unknownFlagResponseIncludesUpstreamAvailableFlagsPrefix() {
-        assertThat(WorldGuardText.availableFlags())
+        String availableFlags = WorldGuardText.availableFlags();
+
+        assertThat(availableFlags)
             .startsWith("Available flags: ")
             .contains("build", "pvp", "passthrough")
             .endsWith(", ");
+        assertThat(availableFlagIds(availableFlags))
+            .contains("greeting", "deny-message", "time-lock", "teleport")
+            .containsAll(valueFlagIds())
+            .isSortedAccordingTo(String.CASE_INSENSITIVE_ORDER);
+    }
+
+    private static List<String> availableFlagIds(String availableFlags) {
+        return Arrays.stream(availableFlags.substring("Available flags: ".length()).split(", "))
+            .filter(flag -> !flag.isBlank())
+            .toList();
+    }
+
+    private static List<String> valueFlagIds() {
+        List<String> flags = new ArrayList<>();
+        WorldGuardValueFlag.ids().forEach(flags::add);
+        return flags;
     }
 }

@@ -69,22 +69,36 @@ public final class RegionQueryEngine {
     }
 
     public static Optional<WorldGuardRegion> globalRegion(Collection<WorldGuardRegion> regions, String world) {
+        return globalRegions(regions, world).stream().findFirst();
+    }
+
+    public static List<WorldGuardRegion> globalRegions(Collection<WorldGuardRegion> regions, String world) {
         if (regions == null) {
-            return Optional.empty();
+            return List.of();
         }
+        WorldGuardRegion exact = null;
         WorldGuardRegion wildcard = null;
         for (WorldGuardRegion region : regions) {
             if (!region.global()) {
                 continue;
             }
             if (region.world().equals(world)) {
-                return Optional.of(region);
+                exact = region;
             }
-            if (region.appliesToWorld(world)) {
+            if (region.world().equals(WorldGuardRegion.ANY_WORLD)) {
                 wildcard = region;
             }
         }
-        return Optional.ofNullable(wildcard);
+        if (exact != null && wildcard != null && exact != wildcard) {
+            return List.of(exact, wildcard);
+        }
+        if (exact != null) {
+            return List.of(exact);
+        }
+        if (wildcard != null) {
+            return List.of(wildcard);
+        }
+        return List.of();
     }
 
     public static FlagEvaluation queryState(
@@ -465,7 +479,7 @@ public final class RegionQueryEngine {
         int z
     ) {
         List<WorldGuardRegion> applicable = new ArrayList<>(applicableRegions(regions, world, x, y, z));
-        globalRegion(regions, world).ifPresent(applicable::add);
+        applicable.addAll(globalRegions(regions, world));
         return applicable;
     }
 
@@ -477,7 +491,12 @@ public final class RegionQueryEngine {
     }
 
     private static int effectivePriority(WorldGuardRegion region) {
-        return region.global() ? Integer.MIN_VALUE : region.priority();
+        if (!region.global()) {
+            return region.priority();
+        }
+        return region.world().equals(WorldGuardRegion.ANY_WORLD)
+            ? Integer.MIN_VALUE
+            : Integer.MIN_VALUE + 1;
     }
 
     private static boolean descendantOf(
