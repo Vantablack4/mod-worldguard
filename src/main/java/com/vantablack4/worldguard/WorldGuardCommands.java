@@ -4,7 +4,6 @@ import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -16,8 +15,6 @@ import java.util.concurrent.CompletableFuture;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -99,8 +96,6 @@ public final class WorldGuardCommands {
         "noone",
         "deny"
     );
-    private static final SimpleCommandExceptionType WORLD_EXPECTED =
-        new SimpleCommandExceptionType(Component.literal("Expected world"));
     private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
         new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
@@ -1532,7 +1527,7 @@ public final class WorldGuardCommands {
     }
 
     private static RequiredArgumentBuilder<CommandSourceStack, String> worldArgument() {
-        return Commands.argument(LIST_WORLD_ARGUMENT, WorldArgumentType.INSTANCE);
+        return Commands.argument(LIST_WORLD_ARGUMENT, StringArgumentType.word());
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> worldFlag(ArgumentBuilder<CommandSourceStack, ?> child) {
@@ -1998,30 +1993,6 @@ public final class WorldGuardCommands {
             }
         }
         return false;
-    }
-
-    private static final class WorldArgumentType implements ArgumentType<String> {
-        private static final WorldArgumentType INSTANCE = new WorldArgumentType();
-
-        @Override
-        public String parse(StringReader reader) throws CommandSyntaxException {
-            if (reader.canRead() && (reader.peek() == '"' || reader.peek() == '\'')) {
-                return reader.readString();
-            }
-            int start = reader.getCursor();
-            while (reader.canRead() && !Character.isWhitespace(reader.peek())) {
-                reader.skip();
-            }
-            if (reader.getCursor() == start) {
-                throw WORLD_EXPECTED.createWithContext(reader);
-            }
-            return reader.getString().substring(start, reader.getCursor());
-        }
-
-        @Override
-        public Collection<String> getExamples() {
-            return List.of("world", "minecraft:overworld", "*");
-        }
     }
 
     private static ListRelationship relationship(WorldGuardRegion region, UUID playerUuid) {

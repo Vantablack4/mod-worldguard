@@ -3,6 +3,7 @@ package com.vantablack4.worldguard;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
@@ -16,6 +17,7 @@ import net.fabricmc.fabric.api.permission.v1.PermissionContextOwner;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.synchronization.ArgumentTypeInfos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
@@ -211,6 +213,25 @@ final class WorldGuardCommandsTests {
                     .as(alias + " -w")
                     .isNotNull();
             }
+        }
+    }
+
+    @Test
+    void commandArgumentsCanBeSerializedForJoiningPlayers() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir, 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+
+        commands.register(dispatcher);
+
+        for (CommandNode<CommandSourceStack> node : dispatcher.getRoot().getChildren()) {
+            assertSerializableArguments(node);
         }
     }
 
@@ -771,6 +792,15 @@ final class WorldGuardCommandsTests {
         CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(name);
         assertThat(root).as(name).isNotNull();
         return root;
+    }
+
+    private static void assertSerializableArguments(CommandNode<CommandSourceStack> node) {
+        if (node instanceof ArgumentCommandNode<CommandSourceStack, ?> argumentNode) {
+            ArgumentTypeInfos.unpack(argumentNode.getType());
+        }
+        for (CommandNode<CommandSourceStack> child : node.getChildren()) {
+            assertSerializableArguments(child);
+        }
     }
 
     private static WorldGuardRegion region(String id) {
