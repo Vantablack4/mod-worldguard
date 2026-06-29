@@ -222,11 +222,21 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
-    void tramplingSeparatesPlayerAndMobFallbackFlags() {
+    void tramplingUsesBuildStyleDelegateFlags() {
         assertThat(WorldGuardProtectionHooks.trampleFlags(true))
-            .containsExactly(WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.BUILD);
+            .containsExactly(
+                WorldGuardFlag.BUILD,
+                WorldGuardFlag.BLOCK_BREAK,
+                WorldGuardFlag.BLOCK_PLACE,
+                WorldGuardFlag.TRAMPLE_BLOCKS
+            );
         assertThat(WorldGuardProtectionHooks.trampleFlags(false))
-            .containsExactly(WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.MOB_GRIEF);
+            .containsExactly(
+                WorldGuardFlag.BUILD,
+                WorldGuardFlag.BLOCK_BREAK,
+                WorldGuardFlag.BLOCK_PLACE,
+                WorldGuardFlag.TRAMPLE_BLOCKS
+            );
     }
 
     @Test
@@ -293,18 +303,18 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
-    void farmlandMutationFlagsSeparateDryingFromHydration() {
+    void farmlandMutationFlagsSeparateSoilDryFromMoistureChange() {
         var hydrated = Blocks.FARMLAND.defaultBlockState()
             .setValue(FarmlandBlock.MOISTURE, FarmlandBlock.MAX_MOISTURE);
         var drying = Blocks.FARMLAND.defaultBlockState()
             .setValue(FarmlandBlock.MOISTURE, FarmlandBlock.MAX_MOISTURE - 1);
 
         assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(hydrated, drying))
-            .containsExactly(WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
+            .containsExactly(WorldGuardFlag.MOISTURE_CHANGE);
         assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(drying, hydrated))
             .containsExactly(WorldGuardFlag.MOISTURE_CHANGE);
         assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(hydrated, Blocks.DIRT.defaultBlockState()))
-            .containsExactly(WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
+            .containsExactly(WorldGuardFlag.SOIL_DRY);
     }
 
     @Test
@@ -386,6 +396,21 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void bukkitStyleGlobalWorldAliasBlocksFarmlandDryMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("world")
+            .withFlag(WorldGuardFlag.SOIL_DRY, FlagState.DENY);
+
+        assertThat(global.world()).isEqualTo("minecraft:overworld");
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardFlag.SOIL_DRY,
+            WorldGuardFlag.MOISTURE_CHANGE
+        )).isTrue();
+    }
+
+    @Test
     void globalMoistureChangeDenyBlocksFarmlandMoistureMutation() {
         WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
             .withFlag(WorldGuardFlag.MOISTURE_CHANGE, FlagState.DENY);
@@ -396,6 +421,44 @@ final class WorldGuardProtectionHooksTests {
             new BlockPos(5, 64, 5),
             WorldGuardFlag.SOIL_DRY,
             WorldGuardFlag.MOISTURE_CHANGE
+        )).isTrue();
+    }
+
+    @Test
+    void globalMoistureChangeDenyDoesNotBlockSoilDryFadeHook() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.MOISTURE_CHANGE, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesFarmlandDry(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5)
+        )).isFalse();
+    }
+
+    @Test
+    void globalSoilDryDenyFallsBackForFarmlandDryHookInsideLocalRegion() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion local = new WorldGuardRegion(
+            "farm",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            128,
+            10,
+            5,
+            Set.of(),
+            Map.of()
+        );
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.SOIL_DRY, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesFarmlandDry(
+            List.of(local, global),
+            "minecraft:overworld",
+            pos
         )).isTrue();
     }
 
@@ -413,6 +476,47 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void bukkitStyleGlobalWorldAliasBlocksPlayerTrampleMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("world")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        assertThat(global.world()).isEqualTo("minecraft:overworld");
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardProtectionHooks.trampleFlags(true)
+        )).isTrue();
+    }
+
+    @Test
+    void globalBlockTramplingDenyFallsBackForPlayerTrampleHookInsideLocalBuildAllowRegion() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion local = new WorldGuardRegion(
+            "farm",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            128,
+            10,
+            5,
+            Set.of(),
+            Map.of(WorldGuardFlag.BUILD, FlagState.ALLOW)
+        );
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesTrample(
+            List.of(local, global),
+            "minecraft:overworld",
+            pos,
+            true
+        )).isTrue();
+    }
+
+    @Test
     void globalBlockTramplingDenyBlocksMobTrampleMutation() {
         WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
             .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
@@ -422,6 +526,33 @@ final class WorldGuardProtectionHooksTests {
             "minecraft:overworld",
             new BlockPos(5, 64, 5),
             WorldGuardProtectionHooks.trampleFlags(false)
+        )).isTrue();
+    }
+
+    @Test
+    void globalBlockTramplingDenyFallsBackForMobTrampleHookInsideLocalMobGriefAllowRegion() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion local = new WorldGuardRegion(
+            "farm",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            128,
+            10,
+            5,
+            Set.of(),
+            Map.of(WorldGuardFlag.MOB_GRIEF, FlagState.ALLOW)
+        );
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesTrample(
+            List.of(local, global),
+            "minecraft:overworld",
+            pos,
+            false
         )).isTrue();
     }
 

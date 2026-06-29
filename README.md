@@ -162,6 +162,10 @@ rejected by commands that define or reshape physical regions, set priority, or
 set parents, matching upstream WorldGuard behavior.
 Existing-region commands that support `-w <world>` expect the world switch
 before the region argument, matching the Brigadier forms listed above.
+Default Bukkit-style world names are normalized for Fabric runtime checks:
+`world`/`overworld` map to `minecraft:overworld`, `world_nether`/`nether` map
+to `minecraft:the_nether`, and `world_the_end`/`end` map to
+`minecraft:the_end`.
 `/region remove`, `/region delete`, `/region del`, and `/region rem` reject
 parent regions with child regions unless `-f` is supplied to remove descendants
 or `-u` is supplied to unset the direct children parent value; `-f` and `-u`

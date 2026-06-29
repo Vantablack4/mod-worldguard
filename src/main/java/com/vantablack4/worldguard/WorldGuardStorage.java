@@ -485,7 +485,13 @@ public final class WorldGuardStorage {
         if (rawWorld == null || rawWorld.isBlank()) {
             return WorldGuardRegion.ANY_WORLD;
         }
-        return rawWorld.trim();
+        String trimmed = rawWorld.trim();
+        return switch (trimmed.toLowerCase(Locale.ROOT)) {
+            case "world", "overworld", "minecraft:overworld" -> "minecraft:overworld";
+            case "world_nether", "nether", "the_nether", "dim-1", "minecraft:the_nether" -> "minecraft:the_nether";
+            case "world_the_end", "end", "the_end", "dim1", "minecraft:the_end" -> "minecraft:the_end";
+            default -> trimmed;
+        };
     }
 
     private Optional<WorldGuardRegion> parseRegionKey(String regionKey) {

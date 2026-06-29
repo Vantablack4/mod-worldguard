@@ -364,14 +364,26 @@ public final class WorldGuardProtectionHooks {
     }
 
     public static boolean deniesTrample(Level level, Entity entity, BlockPos pos) {
-        if (!shouldCheck(level) || pos == null) {
+        WorldGuardService activeService = service;
+        if (activeService == null || level == null || level.isClientSide() || pos == null) {
             return false;
         }
         WorldGuardFlag[] flags = trampleFlags(entity instanceof Player);
         if (entity instanceof ServerPlayer serverPlayer) {
-            return WorldGuardSessionHooks.denyAction(serverPlayer, pos, flags);
+            List<WorldGuardRegion> regions = activeService.storage().regions();
+            return !WorldGuardPolicy.evaluateBuild(
+                regions,
+                worldId(level),
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                serverPlayer.getUUID(),
+                activeService.regionGroups(serverPlayer, regions),
+                activeService.isAdmin(serverPlayer),
+                flags
+            ).allowed();
         }
-        return deniesAny(level, pos, flags);
+        return deniesTrample(activeService.storage().regions(), worldId(level), pos, entity instanceof Player);
     }
 
     public static boolean deniesFarmlandTurnToDirt(Level level, Entity entity, BlockPos pos) {
@@ -474,7 +486,14 @@ public final class WorldGuardProtectionHooks {
     }
 
     public static boolean deniesFarmlandDry(LevelAccessor level, BlockPos pos) {
-        return deniesNaturalMutation(level, pos, WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
+        WorldGuardService activeService = service;
+        if (!(level instanceof Level concreteLevel)
+            || activeService == null
+            || concreteLevel.isClientSide()
+            || pos == null) {
+            return false;
+        }
+        return deniesFarmlandDry(activeService.storage().regions(), worldId(concreteLevel), pos);
     }
 
     public static boolean deniesFarmlandMutation(LevelAccessor level, BlockPos pos, BlockState nextState) {
@@ -787,9 +806,24 @@ public final class WorldGuardProtectionHooks {
     }
 
     static WorldGuardFlag[] trampleFlags(boolean player) {
-        return player
-            ? new WorldGuardFlag[] { WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.BUILD }
-            : new WorldGuardFlag[] { WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.MOB_GRIEF };
+        return new WorldGuardFlag[] {
+            WorldGuardFlag.BUILD,
+            WorldGuardFlag.BLOCK_BREAK,
+            WorldGuardFlag.BLOCK_PLACE,
+            WorldGuardFlag.TRAMPLE_BLOCKS
+        };
+    }
+
+    static WorldGuardFlag[] farmlandDryFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY };
+    }
+
+    static boolean deniesFarmlandDry(List<WorldGuardRegion> regions, String world, BlockPos pos) {
+        return deniesAny(regions, world, pos, farmlandDryFlags());
+    }
+
+    static boolean deniesTrample(List<WorldGuardRegion> regions, String world, BlockPos pos, boolean player) {
+        return deniesAny(regions, world, pos, trampleFlags(player));
     }
 
     static WorldGuardFlag[] redstoneTriggerFlags() {
@@ -893,14 +927,11 @@ public final class WorldGuardProtectionHooks {
                 && nextState.hasProperty(FarmlandBlock.MOISTURE)) {
                 int currentMoisture = currentState.getValue(FarmlandBlock.MOISTURE);
                 int nextMoisture = nextState.getValue(FarmlandBlock.MOISTURE);
-                if (nextMoisture < currentMoisture) {
-                    return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE };
-                }
-                if (nextMoisture > currentMoisture) {
+                if (nextMoisture != currentMoisture) {
                     return new WorldGuardFlag[] { WorldGuardFlag.MOISTURE_CHANGE };
                 }
             } else if (nextState == null || !nextState.is(Blocks.FARMLAND)) {
-                return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE };
+                return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY };
             }
         }
         return new WorldGuardFlag[] { WorldGuardFlag.MOISTURE_CHANGE };

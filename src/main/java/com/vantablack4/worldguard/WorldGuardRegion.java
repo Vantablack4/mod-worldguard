@@ -51,7 +51,7 @@ public record WorldGuardRegion(
         if (world == null || world.isBlank()) {
             throw new IllegalArgumentException("World id is required");
         }
-        world = world.trim();
+        world = WorldGuardStorage.normalizeWorld(world);
         type = type == null ? RegionType.CUBOID : type;
         if (id.equals(GLOBAL_REGION_ID)) {
             type = RegionType.GLOBAL;

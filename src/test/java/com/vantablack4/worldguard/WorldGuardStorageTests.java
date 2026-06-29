@@ -243,6 +243,25 @@ final class WorldGuardStorageTests {
     }
 
     @Test
+    void normalizesBukkitStyleDefaultWorldAliases() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.findOrCreateGlobal("world");
+        storage.setFlag(WorldGuardRegion.GLOBAL_REGION_ID, "world", WorldGuardFlag.SOIL_DRY, FlagState.DENY);
+        storage.findOrCreateGlobal("world_nether");
+        storage.findOrCreateGlobal("world_the_end");
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+
+        WorldGuardRegion overworld = reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:overworld")
+            .orElseThrow();
+        assertThat(overworld.world()).isEqualTo("minecraft:overworld");
+        assertThat(overworld.flag(WorldGuardFlag.SOIL_DRY)).isEqualTo(FlagState.DENY);
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "world")).contains(overworld);
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:the_nether")).isPresent();
+        assertThat(reloaded.find(WorldGuardRegion.GLOBAL_REGION_ID, "minecraft:the_end")).isPresent();
+    }
+
+    @Test
     void deleteCanRefuseRegionsWithChildren() {
         WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
         storage.save(region("parent"));
