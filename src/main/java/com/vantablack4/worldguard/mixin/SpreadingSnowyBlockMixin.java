@@ -3,6 +3,7 @@ package com.vantablack4.worldguard.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import net.minecraft.core.BlockPos;
@@ -26,5 +27,21 @@ public abstract class SpreadingSnowyBlockMixin {
         if (WorldGuardProtectionHooks.deniesGrassOrMyceliumSpread(level, pos, state)) {
             callbackInfo.cancel();
         }
+    }
+
+    @Redirect(
+        method = "randomTick",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerLevel;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"
+        )
+    )
+    private boolean mod_worldguard$denyProtectedGrassSpreadTarget(
+        ServerLevel level,
+        BlockPos pos,
+        BlockState state
+    ) {
+        return !WorldGuardProtectionHooks.deniesGrassOrMyceliumSpread(level, pos, state)
+            && level.setBlockAndUpdate(pos, state);
     }
 }

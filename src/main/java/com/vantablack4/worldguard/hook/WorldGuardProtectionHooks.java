@@ -489,6 +489,10 @@ public final class WorldGuardProtectionHooks {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.VINE_GROWTH);
     }
 
+    public static boolean deniesGrowingPlantGrowth(Level level, BlockPos pos, BlockState state) {
+        return deniesAny(level, pos, growingPlantGrowthFlags(state));
+    }
+
     public static boolean deniesRockGrowth(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.ROCK_GROWTH);
     }
@@ -838,6 +842,13 @@ public final class WorldGuardProtectionHooks {
 
     static WorldGuardFlag[] lavaFireFlags() {
         return new WorldGuardFlag[] { WorldGuardFlag.LAVA_FIRE };
+    }
+
+    static WorldGuardFlag[] growingPlantGrowthFlags(BlockState state) {
+        if (state != null && (state.is(Blocks.CAVE_VINES) || state.is(Blocks.CAVE_VINES_PLANT))) {
+            return new WorldGuardFlag[] { WorldGuardFlag.VINE_GROWTH, WorldGuardFlag.CROP_GROWTH };
+        }
+        return new WorldGuardFlag[] { WorldGuardFlag.VINE_GROWTH };
     }
 
     static WorldGuardFlag[] entityPlaceFlags() {

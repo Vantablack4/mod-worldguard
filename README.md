@@ -38,8 +38,9 @@ Included in the Fabric port:
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
   sapling/tree feature growth, leaf decay,
   mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations,
-  lava-created fire, frosted-ice formation, snowman snow trails, and experience
-  orb drops.
+  amethyst bud growth, hanging mangrove propagule growth, cave-vine crop/vine
+  growth, lava-created fire, frosted-ice formation, snowman snow trails, and
+  experience orb drops.
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
   `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
   `game-mode`, and heal/feed flags.
@@ -71,6 +72,8 @@ Not included yet:
 - Dispenser/dropper synthetic action simulation, lectern book-take protection,
   entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
   and mount/dismount mixin parity beyond the current direct-use ride checks.
+- Remaining target-position edge cases for pointed-dripstone spread and
+  generated huge mushroom blocks at region borders.
 - Full rich-text/clickable command output parity with Bukkit WorldGuard.
 
 ## Commands

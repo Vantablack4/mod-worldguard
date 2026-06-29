@@ -2,6 +2,8 @@ package com.vantablack4.worldguard.hook;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -257,6 +259,16 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void growingPlantHelpersMapCaveVinesToCropAndVineFlags() {
+        assertThat(WorldGuardProtectionHooks.growingPlantGrowthFlags(Blocks.CAVE_VINES.defaultBlockState()))
+            .containsExactly(WorldGuardFlag.VINE_GROWTH, WorldGuardFlag.CROP_GROWTH);
+        assertThat(WorldGuardProtectionHooks.growingPlantGrowthFlags(Blocks.CAVE_VINES_PLANT.defaultBlockState()))
+            .containsExactly(WorldGuardFlag.VINE_GROWTH, WorldGuardFlag.CROP_GROWTH);
+        assertThat(WorldGuardProtectionHooks.growingPlantGrowthFlags(Blocks.WEEPING_VINES.defaultBlockState()))
+            .containsExactly(WorldGuardFlag.VINE_GROWTH);
+    }
+
+    @Test
     void vehicleTypesMatchUpstreamBoatsAndMinecartsOnly() {
         assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.OAK_BOAT)).isTrue();
         assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.BAMBOO_CHEST_RAFT)).isTrue();
@@ -352,6 +364,20 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void globalMoistureChangeDenyBlocksFarmlandMoistureMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.MOISTURE_CHANGE, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardFlag.SOIL_DRY,
+            WorldGuardFlag.MOISTURE_CHANGE
+        )).isTrue();
+    }
+
+    @Test
     void globalBlockTramplingDenyBlocksPlayerTrampleMutation() {
         WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
             .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
@@ -361,6 +387,19 @@ final class WorldGuardProtectionHooksTests {
             "minecraft:overworld",
             new BlockPos(5, 64, 5),
             WorldGuardProtectionHooks.trampleFlags(true)
+        )).isTrue();
+    }
+
+    @Test
+    void globalBlockTramplingDenyBlocksMobTrampleMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardProtectionHooks.trampleFlags(false)
         )).isTrue();
     }
 
@@ -474,6 +513,26 @@ final class WorldGuardProtectionHooksTests {
             pos,
             WorldGuardProtectionHooks.lavaFireFlags()
         )).isTrue();
+    }
+
+    @Test
+    void mixinConfigurationRegistersEnvironmentProtectionHooks() throws Exception {
+        String mixins = Files.readString(Path.of("src/main/resources/mod_worldguard.mixins.json"));
+
+        assertThat(mixins)
+            .contains(
+                "BuddingAmethystBlockMixin",
+                "CaveVinesBerryGrowthMixin",
+                "FarmlandBlockMixin",
+                "FrogspawnBlockMixin",
+                "ExperienceOrbMixin",
+                "LavaFluidMixin",
+                "MangrovePropaguleBlockMixin",
+                "ReplaceDiskMixin",
+                "SculkChargeCursorMixin",
+                "SnowGolemMixin",
+                "TurtleEggBlockMixin"
+            );
     }
 
     @Test

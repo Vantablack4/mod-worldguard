@@ -45,8 +45,9 @@ and server-event behavior needed by the Vantablack server.
   pickup, vehicle and entity placement/destruction, item frame rotation,
   trampling, redstone triggers, hoppers, lightning,
   snow/ice weather, melt, growth, sapling/tree feature growth, spread, decay,
-  fade mutations, lava-created fire, frosted-ice formation, snowman snow
-  trails, and experience orb drops.
+  fade mutations, amethyst bud growth, hanging mangrove propagule growth,
+  cave-vine crop/vine growth, lava-created fire, frosted-ice formation, snowman
+  snow trails, and experience orb drops.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
   flags.
 - Upstream-style build action semantics for checked flag sets: specific action
@@ -73,6 +74,8 @@ Full WorldGuard behavior is mostly event coverage and cache design:
   dispenser/dropper synthetic item/block actions, lectern book-take protection,
   entity-triggered dripleaf tilt, full non-damaging potion-effect paths, and
   mount/dismount edge cases beyond direct ride use.
+- Finish remaining target-position region-border parity for pointed-dripstone
+  growth and generated huge mushroom blocks.
 - Continue command output parity for Bukkit WorldGuard's richer text/clickable
   pagination and exact formatting.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
