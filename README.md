@@ -29,8 +29,10 @@ Included in the Fabric port:
   explosions, fire spread, fluid flow, pistons, Enderman/Ravager grief,
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
-  teleport use, chat send, sleep, PvP, fall damage, invincibility, item drop,
-  item pickup, vehicle placement/destruction, item frame rotation, crop and block trampling, pressure plates,
+  teleport use, chat send/receive filtering, sleep, PvP, fall damage,
+  natural health regeneration, natural hunger drain, invincibility, item drop,
+  item pickup, vehicle and entity placement/destruction, item frame rotation,
+  crop and block trampling, pressure plates,
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
   sapling/tree feature growth, leaf decay,
   mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations.
@@ -67,7 +69,8 @@ Not included yet:
 /wg reload
 /region list [page]
 /region list -i <id-search> [page]
-/region list -w <world> [-i <id-search>] [page]
+/region list -w <world> [-i <id-search>] [-p <player>] [-n] [-s] [page]
+/region list -p <player> [-n] [-s] [-i <id-search>] [-w <world>] [page]
 /region info [region]
 /region i [region]
 /region define <region>

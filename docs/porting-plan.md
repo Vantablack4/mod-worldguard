@@ -34,8 +34,10 @@ and server-event behavior needed by the Vantablack server.
   explosions, fire, fluids, pistons, practical Enderman/Ravager grief,
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
-  use, chat send, sleep, PvP, fall damage, invincibility, item drop, item
-  pickup, vehicle placement/destruction, item frame rotation, trampling, redstone triggers, hoppers, lightning,
+  use, chat send/receive filtering, sleep, PvP, fall damage, natural health
+  regeneration, natural hunger drain, invincibility, item drop, item
+  pickup, vehicle and entity placement/destruction, item frame rotation,
+  trampling, redstone triggers, hoppers, lightning,
   snow/ice weather, melt, growth, sapling/tree feature growth, spread, decay,
   and fade mutations.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
