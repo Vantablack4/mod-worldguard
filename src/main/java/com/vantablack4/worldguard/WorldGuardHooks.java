@@ -14,7 +14,6 @@ import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.InteractionResult;
@@ -71,21 +70,47 @@ public final class WorldGuardHooks {
             BlockPos clicked = hitResult.getBlockPos();
             BlockPos placementTarget = clicked.relative(hitResult.getDirection());
             var stack = player.getItemInHand(hand);
-            if (stack.getItem() instanceof BlockItem
-                && denyAny(serverPlayer, world, placementTarget, WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE)) {
+            WorldGuardProtectionHooks.InteractionRule placementRule = WorldGuardProtectionHooks.blockPlacementRule(stack);
+            if (placementRule != null && denyAny(
+                serverPlayer,
+                world,
+                placementTarget,
+                placementRule.action(),
+                placementRule.flags()
+            )) {
                 return InteractionResult.FAIL;
+            }
+            if (WorldGuardProtectionHooks.isLighter(stack)) {
+                return InteractionResult.PASS;
             }
             BlockPos bucketTarget = WorldGuardProtectionHooks.bucketMutationTarget(stack, clicked, hitResult.getDirection());
             if (bucketTarget != null
                 && denyAny(serverPlayer, world, bucketTarget, WorldGuardProtectionHooks.bucketMutationFlags(world, stack, clicked))) {
                 return InteractionResult.FAIL;
             }
-            if (WorldGuardProtectionHooks.isContainerAccess(world, clicked)
-                && denyAny(serverPlayer, world, clicked, WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE)) {
+            WorldGuardProtectionHooks.InteractionRule blockUseRule = WorldGuardProtectionHooks.blockUseRule(world.getBlockState(clicked));
+            if (blockUseRule != null && denyAny(
+                serverPlayer,
+                world,
+                clicked,
+                blockUseRule.action(),
+                blockUseRule.flags()
+            )) {
                 return InteractionResult.FAIL;
             }
-            if (!stack.isEmpty()
-                && denyAny(serverPlayer, world, clicked, WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE)) {
+            for (BlockPos containerPos : WorldGuardProtectionHooks.containerAccessPositions(world, clicked)) {
+                if (denyAny(serverPlayer, world, containerPos, WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE)) {
+                    return InteractionResult.FAIL;
+                }
+            }
+            WorldGuardProtectionHooks.InteractionRule itemUseRule = WorldGuardProtectionHooks.itemUseRule(stack);
+            if (itemUseRule != null && denyAny(
+                serverPlayer,
+                world,
+                clicked,
+                itemUseRule.action(),
+                itemUseRule.flags()
+            )) {
                 return InteractionResult.FAIL;
             }
             return denyAny(serverPlayer, world, clicked, WorldGuardFlag.INTERACT, WorldGuardFlag.USE)
@@ -106,7 +131,14 @@ public final class WorldGuardHooks {
                 && denyAny(serverPlayer, world, player.blockPosition(), WorldGuardFlag.CHORUS_TELEPORT, WorldGuardFlag.EXIT_VIA_TELEPORT)) {
                 return InteractionResult.FAIL;
             }
-            return denyAny(serverPlayer, world, player.blockPosition(), WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE)
+            WorldGuardProtectionHooks.InteractionRule itemUseRule = WorldGuardProtectionHooks.itemUseRule(stack);
+            return itemUseRule != null && denyAny(
+                serverPlayer,
+                world,
+                player.blockPosition(),
+                itemUseRule.action(),
+                itemUseRule.flags()
+            )
                 ? InteractionResult.FAIL
                 : InteractionResult.PASS;
         });
@@ -122,6 +154,18 @@ public final class WorldGuardHooks {
             if (WorldGuardProtectionHooks.isEntityContainerAccess(entity)
                 && denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE_ENTITY)) {
                 return InteractionResult.FAIL;
+            }
+            if (WorldGuardProtectionHooks.isRiddenOnUse(entity)) {
+                return denyAny(
+                    serverPlayer,
+                    world,
+                    entity.blockPosition(),
+                    "ride that",
+                    WorldGuardFlag.RIDE,
+                    WorldGuardFlag.INTERACT
+                )
+                    ? InteractionResult.FAIL
+                    : InteractionResult.PASS;
             }
             return denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.USE_ENTITY)
                 ? InteractionResult.FAIL
@@ -154,6 +198,10 @@ public final class WorldGuardHooks {
 
     private boolean denyAny(ServerPlayer player, Level world, BlockPos pos, WorldGuardFlag... flags) {
         return service.deny(player, service.checkAny(player, worldId(world), pos, flags));
+    }
+
+    private boolean denyAny(ServerPlayer player, Level world, BlockPos pos, String action, WorldGuardFlag... flags) {
+        return service.deny(player, service.checkAny(player, worldId(world), pos, flags), worldId(world), pos, action);
     }
 
     private static String worldId(Level world) {

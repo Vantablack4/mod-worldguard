@@ -25,8 +25,10 @@ Included in the Fabric port:
 - `/wg`, `/worldguard`, `/region`, `/regions`, and `/rg` commands.
 - Protection hooks for block break, block attack, block use/place attempts,
   item use, bucket placement/pickup, chest/container access for blocks and
-  entities, entity use, entity attack, non-player entity damage, mob spawning,
-  explosions, fire spread, fluid flow, pistons, Enderman/Ravager grief,
+  entities, double-chest endpoint checks, entity use, riding, entity attack,
+  non-player entity damage, potion/firework/wind-charge projectile damage,
+  mob spawning, explosions, TNT/lighter use, anvil, bed, respawn anchor, and
+  big-dripleaf interactions, fire spread, fluid flow, pistons, Enderman/Ravager grief,
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   teleport use, chat send/receive filtering, sleep, PvP, fall damage,
@@ -53,13 +55,21 @@ Included in the Fabric port:
 - Default protected regions deny `build`, `block-break`, `block-place`, `use`,
   `interact`, `item-use`, `use-entity`, `attack-entity`, explosions,
   mob grief, pistons, fire spread, and fluid flow for non-members.
+- Upstream-style build-related flag resolution: a specific allow such as
+  `lighter allow` can permit that action through a broader `build deny`, while a
+  specific deny such as `block-place deny` still wins.
 
 Not included yet:
 
 - Full WorldGuard Bukkit API compatibility.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags,
-  including remaining `/region info` options.
+  including remaining `/region info` options and remaining explicit `-w`
+  world-targeted mutator forms.
+- Dispenser/dropper synthetic action simulation, lectern book-take protection,
+  entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
+  and mount/dismount mixin parity beyond the current direct-use ride checks.
+- Full rich-text/clickable command output parity with Bukkit WorldGuard.
 
 ## Commands
 
@@ -147,34 +157,56 @@ block-place
 use
 interact
 chest-access
+vehicle-place
+vehicle-destroy
 use-entity
 attack-entity
 item-use
 pvp
 tnt
+lighter
+ride
+potion-splash
 fire-spread
 water-flow
 lava-flow
+lava-fire
 mob-grief
 pistons
 send-chat
+receive-chat
 sleep
+respawn-anchors
 item-drop
 item-pickup
+exp-drops
 mob-spawning
 mob-damage
 damage-animals
+creeper-explosion
+enderdragon-block-damage
+ghast-fireball
+other-explosion
+breeze-charge-explosion
+wither-damage
+enderman-grief
+snowman-trails
+ravager-grief
 entity-painting-destroy
 entity-item-frame-destroy
 item-frame-rotation
 block-trampling
-mob-spawning
+firework-damage
+use-anvil
+use-dripleaf
+wind-charge-burst
 lightning
 snow-fall
 snow-melt
 ice-form
 ice-melt
 frosted-ice-melt
+frosted-ice-form
 crop-growth
 mushroom-growth
 grass-growth
@@ -201,6 +233,12 @@ explicit flag value decides the action. Members bypass denies from their own
 matching region when the flag has member-bypass semantics. Players with an
 explicit bypass permission bypass all protection checks until they disable bypass
 with `/region bypass off`.
+
+For build-related checks, the Fabric runtime follows WorldGuard's `testBuild`
+shape rather than treating all checked flags as a flat deny list. A specific
+state flag can allow its exact action through a broader `build deny`; a specific
+deny still blocks the action. This matters for upstream UX such as permitting
+`lighter` while denying general block placement.
 
 The storage model also recognizes and round-trips typed upstream-style flags
 such as `teleport`, `spawn`, `teleport-message`, `deny-message`, `greeting`,

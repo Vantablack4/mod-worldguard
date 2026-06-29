@@ -38,6 +38,19 @@ public final class WorldGuardService {
         boolean bypass = isAdmin(player);
         List<WorldGuardRegion> regions = storage.regions(world);
         Set<String> groups = WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions);
+        if (usesBuildOverride(flags)) {
+            return WorldGuardPolicy.evaluateBuild(
+                regions,
+                world,
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                player.getUUID(),
+                groups,
+                bypass,
+                flags
+            );
+        }
         for (WorldGuardFlag flag : flags) {
             ProtectionDecision decision = WorldGuardPolicy.evaluate(
                 regions,
@@ -85,6 +98,14 @@ public final class WorldGuardService {
             return false;
         }
         sendDenyMessage(player, decision, world, pos, "");
+        return true;
+    }
+
+    public boolean deny(ServerPlayer player, ProtectionDecision decision, String world, BlockPos pos, String action) {
+        if (decision.allowed()) {
+            return false;
+        }
+        sendDenyMessage(player, decision, world, pos, action);
         return true;
     }
 
@@ -151,5 +172,17 @@ public final class WorldGuardService {
 
     private static String worldId(ServerPlayer player) {
         return player == null ? "" : player.level().dimension().identifier().toString();
+    }
+
+    private static boolean usesBuildOverride(WorldGuardFlag... flags) {
+        if (flags == null || flags.length < 2) {
+            return false;
+        }
+        for (WorldGuardFlag flag : flags) {
+            if (flag == WorldGuardFlag.BUILD) {
+                return true;
+            }
+        }
+        return false;
     }
 }

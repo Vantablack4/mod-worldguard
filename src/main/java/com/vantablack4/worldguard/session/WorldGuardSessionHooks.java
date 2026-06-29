@@ -37,6 +37,7 @@ import com.vantablack4.worldguard.WorldGuardRegion;
 import com.vantablack4.worldguard.WorldGuardService;
 import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+import com.vantablack4.worldguard.hook.WorldGuardProtectionHooks;
 import com.vantablack4.worldguard.model.RegionQueryEngine;
 
 public final class WorldGuardSessionHooks {
@@ -366,6 +367,10 @@ final class WorldGuardSessionRuntime {
             return false;
         }
 
+        if (!allowProjectileDamage(victim, source, attacker, regions)) {
+            return false;
+        }
+
         if (source != null && source.is(DamageTypes.FALL) && denyAction(victim, victim.blockPosition(), WorldGuardFlag.FALL_DAMAGE)) {
             victim.resetFallDistance();
             return false;
@@ -407,6 +412,9 @@ final class WorldGuardSessionRuntime {
         }
 
         List<WorldGuardRegion> regions = service.storage().regions();
+        if (!allowProjectileDamage(victim, source, attacker, regions)) {
+            return false;
+        }
         if (attacker != null) {
             ProtectionDecision decision = WorldGuardSessionRules.checkAny(
                 regions,
@@ -427,6 +435,43 @@ final class WorldGuardSessionRuntime {
             null,
             false,
             flags.toArray(WorldGuardFlag[]::new)
+        );
+        return decision.allowed();
+    }
+
+    private boolean allowProjectileDamage(
+        LivingEntity victim,
+        DamageSource source,
+        ServerPlayer actor,
+        List<WorldGuardRegion> regions
+    ) {
+        WorldGuardFlag[] flags = WorldGuardProtectionHooks.projectileDamageFlags(directDamageSource(source));
+        if (flags.length == 0) {
+            return true;
+        }
+
+        String world = worldId(victim.level());
+        BlockPos pos = victim.blockPosition();
+        if (actor != null) {
+            ProtectionDecision decision = WorldGuardSessionRules.checkAny(
+                regions,
+                world,
+                pos,
+                actor.getUUID(),
+                service.regionGroups(actor, regions),
+                service.isAdmin(actor),
+                flags
+            );
+            return !service.deny(actor, decision, world, pos);
+        }
+
+        ProtectionDecision decision = WorldGuardSessionRules.checkAny(
+            regions,
+            world,
+            pos,
+            null,
+            false,
+            flags
         );
         return decision.allowed();
     }
@@ -675,5 +720,9 @@ final class WorldGuardSessionRuntime {
         }
         Entity entity = source.getEntity();
         return entity == null ? source.getDirectEntity() : entity;
+    }
+
+    private static Entity directDamageSource(DamageSource source) {
+        return source == null ? null : source.getDirectEntity();
     }
 }

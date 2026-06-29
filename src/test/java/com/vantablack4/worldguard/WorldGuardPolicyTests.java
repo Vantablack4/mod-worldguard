@@ -91,6 +91,82 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void buildOverrideAllowsSpecificBuildRelatedFlagsToOverrideBuildDeny() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(),
+            Map.of(
+                WorldGuardFlag.BUILD, FlagState.DENY,
+                WorldGuardFlag.LIGHTER, FlagState.ALLOW
+            )
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluateBuild(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            player,
+            List.of(),
+            false,
+            WorldGuardFlag.BUILD,
+            WorldGuardFlag.BLOCK_PLACE,
+            WorldGuardFlag.LIGHTER
+        );
+
+        assertThat(decision.allowed()).isTrue();
+    }
+
+    @Test
+    void buildOverrideKeepsSpecificDenyStrongerThanSpecificAllow() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(),
+            Map.of(
+                WorldGuardFlag.BUILD, FlagState.ALLOW,
+                WorldGuardFlag.LIGHTER, FlagState.ALLOW,
+                WorldGuardFlag.BLOCK_PLACE, FlagState.DENY
+            )
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluateBuild(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            player,
+            List.of(),
+            false,
+            WorldGuardFlag.BUILD,
+            WorldGuardFlag.BLOCK_PLACE,
+            WorldGuardFlag.LIGHTER
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.flag()).isEqualTo(WorldGuardFlag.BLOCK_PLACE);
+    }
+
+    @Test
     void membersBypassDenyInTheirRegion() {
         UUID player = UUID.randomUUID();
         WorldGuardRegion region = new WorldGuardRegion(

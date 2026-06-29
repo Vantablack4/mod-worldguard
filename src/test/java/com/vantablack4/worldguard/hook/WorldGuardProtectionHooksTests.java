@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import net.minecraft.core.BlockPos;
@@ -15,8 +16,11 @@ import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.material.Fluids;
 
 import com.vantablack4.worldguard.FlagState;
@@ -26,6 +30,12 @@ import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 final class WorldGuardProtectionHooksTests {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void chestAccessTargetsInventoryBlocksOnly() {
         SharedConstants.tryDetectVersion();
@@ -36,9 +46,29 @@ final class WorldGuardProtectionHooksTests {
             Blocks.CHEST
         )).isTrue();
         assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.ENDER_CHEST)).isTrue();
+        assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.BARREL)).isTrue();
+        assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.SHULKER_BOX)).isTrue();
         assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.CRAFTING_TABLE)).isFalse();
         assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.ANVIL)).isFalse();
+        assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.BEACON)).isFalse();
+        assertThat(WorldGuardProtectionHooks.isContainerAccessCandidate(null, Blocks.LECTERN)).isFalse();
         assertThat(WorldGuardProtectionHooks.isEntityContainerAccess(null)).isFalse();
+    }
+
+    @Test
+    void doubleChestContainerAccessChecksBothHalves() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        var single = Blocks.CHEST.defaultBlockState()
+            .setValue(ChestBlock.TYPE, ChestType.SINGLE);
+        var doubleChest = Blocks.CHEST.defaultBlockState()
+            .setValue(ChestBlock.TYPE, ChestType.LEFT)
+            .setValue(ChestBlock.FACING, Direction.NORTH);
+
+        assertThat(WorldGuardProtectionHooks.connectedContainerPositions(pos, single))
+            .containsExactly(pos);
+        assertThat(WorldGuardProtectionHooks.connectedContainerPositions(pos, doubleChest))
+            .hasSize(2)
+            .contains(pos);
     }
 
     @Test
@@ -55,6 +85,70 @@ final class WorldGuardProtectionHooksTests {
             .contains(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE, WorldGuardFlag.LAVA_FLOW);
         assertThat(WorldGuardProtectionHooks.bucketMutationFlags(Fluids.EMPTY, null))
             .contains(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_BREAK, WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE);
+    }
+
+    @Test
+    void blockPlacementFlagsAddTntFlagForTntBlocksOnly() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
+        assertThat(WorldGuardProtectionHooks.blockPlacementFlags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE);
+        assertThat(WorldGuardProtectionHooks.tntPlacementFlags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.TNT);
+        assertThat(WorldGuardProtectionHooks.lighterFlags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.LIGHTER);
+        assertThat(WorldGuardProtectionHooks.blockPlacementRule(Items.FLINT_AND_STEEL).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.LIGHTER);
+        assertThat(WorldGuardProtectionHooks.blockPlacementRule(Items.STICK))
+            .isNull();
+    }
+
+    @Test
+    void blockUseRulesMatchUpstreamSpecificInteractionFlags() {
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.ANVIL.defaultBlockState()).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.USE_ANVIL);
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.RED_BED.defaultBlockState()).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.SLEEP);
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.RESPAWN_ANCHOR.defaultBlockState()).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.RESPAWN_ANCHORS);
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.TNT.defaultBlockState()).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.TNT);
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.BIG_DRIPLEAF.defaultBlockState()).flags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.USE_DRIPLEAF);
+        assertThat(WorldGuardProtectionHooks.blockUseRule(Blocks.CRAFTING_TABLE.defaultBlockState()))
+            .isNull();
+    }
+
+    @Test
+    void itemUseRulesMatchUpstreamSpecificItemFlags() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
+        assertThat(WorldGuardProtectionHooks.itemUseRule(Items.STICK).flags())
+            .containsExactly(WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE);
+        assertThat(WorldGuardProtectionHooks.itemUseRule(Items.SPLASH_POTION).flags())
+            .containsExactly(WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE, WorldGuardFlag.POTION_SPLASH);
+        assertThat(WorldGuardProtectionHooks.itemUseRule(Items.LINGERING_POTION).flags())
+            .containsExactly(WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE, WorldGuardFlag.POTION_SPLASH);
+        assertThat(WorldGuardProtectionHooks.itemUseRule(Items.WIND_CHARGE).flags())
+            .containsExactly(WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE, WorldGuardFlag.WIND_CHARGE_BURST);
+    }
+
+    @Test
+    void projectileDamageFlagsMatchUpstreamProjectileSpecificFlags() {
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.FIREWORK_ROCKET))
+            .containsExactly(WorldGuardFlag.FIREWORK_DAMAGE);
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.SPLASH_POTION))
+            .containsExactly(WorldGuardFlag.POTION_SPLASH);
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.LINGERING_POTION))
+            .containsExactly(WorldGuardFlag.POTION_SPLASH);
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.WIND_CHARGE))
+            .containsExactly(WorldGuardFlag.WIND_CHARGE_BURST);
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.BREEZE_WIND_CHARGE))
+            .containsExactly(WorldGuardFlag.BREEZE_WIND_CHARGE);
+        assertThat(WorldGuardProtectionHooks.projectileDamageFlags(EntityType.ARROW))
+            .isEmpty();
     }
 
     @Test
@@ -144,6 +238,8 @@ final class WorldGuardProtectionHooksTests {
     void vehiclePlacementUsesUpstreamBuildAndVehiclePlaceFlags() {
         assertThat(WorldGuardProtectionHooks.vehiclePlaceFlags())
             .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.VEHICLE_PLACE);
+        assertThat(WorldGuardProtectionHooks.rideFlags())
+            .containsExactly(WorldGuardFlag.RIDE, WorldGuardFlag.INTERACT);
         assertThat(WorldGuardProtectionHooks.entityPlaceFlags())
             .containsExactly(WorldGuardFlag.BUILD);
     }

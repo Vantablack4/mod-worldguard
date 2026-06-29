@@ -22,20 +22,28 @@ import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BucketItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelWriter;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.AbstractChestBlock;
+import net.minecraft.world.level.block.AnvilBlock;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.HopperBlock;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.Hopper;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.piston.PistonStructureResolver;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
@@ -54,6 +62,9 @@ public final class WorldGuardProtectionHooks {
     private static volatile WorldGuardService service;
 
     private WorldGuardProtectionHooks() {
+    }
+
+    public record InteractionRule(String action, WorldGuardFlag... flags) {
     }
 
     public static void configure(WorldGuardService configuredService) {
@@ -109,6 +120,85 @@ public final class WorldGuardProtectionHooks {
             return WorldGuardSessionHooks.denyAction(serverPlayer, pos, flags);
         }
         return deniesAny(level, pos, flags);
+    }
+
+    public static InteractionRule blockPlacementRule(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return null;
+        }
+        return blockPlacementRule(stack.getItem());
+    }
+
+    static InteractionRule blockPlacementRule(Item item) {
+        if (item == null) {
+            return null;
+        }
+        if (isLighter(item)) {
+            return new InteractionRule("place fire", lighterFlags());
+        }
+        if (item == Items.TNT) {
+            return new InteractionRule("use explosives", tntPlacementFlags());
+        }
+        if (!(item instanceof BlockItem) && Block.byItem(item) == Blocks.AIR) {
+            return null;
+        }
+        return new InteractionRule("place that block", blockPlacementFlags());
+    }
+
+    public static InteractionRule blockUseRule(BlockState state) {
+        if (state == null) {
+            return null;
+        }
+        Block block = state.getBlock();
+        if (block instanceof AnvilBlock) {
+            return new InteractionRule("use that", WorldGuardFlag.BUILD, WorldGuardFlag.USE_ANVIL);
+        }
+        if (block instanceof BedBlock) {
+            return new InteractionRule("sleep", WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.SLEEP);
+        }
+        if (state.is(Blocks.RESPAWN_ANCHOR)) {
+            return new InteractionRule(
+                "use anchors",
+                WorldGuardFlag.BUILD,
+                WorldGuardFlag.INTERACT,
+                WorldGuardFlag.RESPAWN_ANCHORS
+            );
+        }
+        if (state.is(Blocks.TNT)) {
+            return new InteractionRule("use explosives", WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.TNT);
+        }
+        if (state.is(Blocks.BIG_DRIPLEAF)) {
+            return new InteractionRule("use that", WorldGuardFlag.BUILD, WorldGuardFlag.INTERACT, WorldGuardFlag.USE_DRIPLEAF);
+        }
+        return null;
+    }
+
+    public static InteractionRule itemUseRule(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return null;
+        }
+        return itemUseRule(stack.getItem());
+    }
+
+    static InteractionRule itemUseRule(Item item) {
+        if (item == null) {
+            return null;
+        }
+        if (item == Items.SPLASH_POTION || item == Items.LINGERING_POTION) {
+            return new InteractionRule("use potions", potionSplashFlags());
+        }
+        if (item == Items.WIND_CHARGE) {
+            return new InteractionRule("use wind charges", windChargeUseFlags());
+        }
+        return new InteractionRule("use that", itemUseFlags());
+    }
+
+    public static boolean isLighter(ItemStack stack) {
+        return stack != null && isLighter(stack.getItem());
+    }
+
+    static boolean isLighter(Item item) {
+        return item == Items.FLINT_AND_STEEL || item == Items.FIRE_CHARGE;
     }
 
     public static boolean deniesVehiclePlace(ServerPlayer player, Level level, BlockPos pos) {
@@ -407,16 +497,53 @@ public final class WorldGuardProtectionHooks {
     }
 
     public static boolean isContainerAccess(Level level, BlockPos pos) {
+        return !containerAccessPositions(level, pos).isEmpty();
+    }
+
+    public static List<BlockPos> containerAccessPositions(Level level, BlockPos pos) {
         if (level == null || pos == null) {
-            return false;
+            return List.of();
         }
-        return isContainerAccessCandidate(level.getBlockEntity(pos), level.getBlockState(pos).getBlock());
+        BlockState state = level.getBlockState(pos);
+        if (!isContainerAccessCandidate(level.getBlockEntity(pos), state.getBlock())) {
+            return List.of();
+        }
+        return connectedContainerPositions(pos, state);
     }
 
     static boolean isContainerAccessCandidate(BlockEntity blockEntity, Block block) {
         return blockEntity instanceof Container
-            || blockEntity instanceof MenuProvider
-            || block instanceof AbstractChestBlock<?>;
+            || block instanceof AbstractChestBlock<?>
+            || inventoryBlock(block);
+    }
+
+    static boolean inventoryBlock(Block block) {
+        return block == Blocks.JUKEBOX
+            || block == Blocks.DISPENSER
+            || block == Blocks.FURNACE
+            || block == Blocks.BREWING_STAND
+            || block == Blocks.HOPPER
+            || block == Blocks.DROPPER
+            || block == Blocks.BARREL
+            || block == Blocks.BLAST_FURNACE
+            || block == Blocks.SMOKER
+            || block == Blocks.CHISELED_BOOKSHELF
+            || block == Blocks.CRAFTER
+            || block == Blocks.DECORATED_POT
+            || block instanceof ShulkerBoxBlock;
+    }
+
+    static List<BlockPos> connectedContainerPositions(BlockPos pos, BlockState state) {
+        if (pos == null || state == null) {
+            return List.of();
+        }
+        if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+            BlockPos connected = ChestBlock.getConnectedBlockPos(pos, state);
+            if (!connected.equals(pos)) {
+                return List.of(pos, connected);
+            }
+        }
+        return List.of(pos);
     }
 
     public static boolean isEntityContainerAccess(Entity entity) {
@@ -487,6 +614,49 @@ public final class WorldGuardProtectionHooks {
         return entity instanceof AbstractBoat || entity instanceof AbstractMinecart;
     }
 
+    public static boolean isRiddenOnUse(Entity entity) {
+        if (entity == null || isEntityContainerAccess(entity)) {
+            return false;
+        }
+        EntityType<?> type = entity.getType();
+        return vehicle(entity)
+            || type == EntityType.CAMEL
+            || type == EntityType.CAMEL_HUSK
+            || type == EntityType.DONKEY
+            || type == EntityType.HAPPY_GHAST
+            || type == EntityType.HORSE
+            || type == EntityType.LLAMA
+            || type == EntityType.MULE
+            || type == EntityType.PIG
+            || type == EntityType.SKELETON_HORSE
+            || type == EntityType.STRIDER
+            || type == EntityType.TRADER_LLAMA
+            || type == EntityType.ZOMBIE_HORSE;
+    }
+
+    public static WorldGuardFlag[] projectileDamageFlags(Entity source) {
+        if (source == null) {
+            return new WorldGuardFlag[0];
+        }
+        return projectileDamageFlags(source.getType());
+    }
+
+    public static WorldGuardFlag[] projectileDamageFlags(EntityType<?> sourceType) {
+        if (sourceType == null) {
+            return new WorldGuardFlag[0];
+        }
+        if (sourceType == EntityType.FIREWORK_ROCKET) {
+            return fireworkDamageFlags();
+        }
+        if (sourceType == EntityType.SPLASH_POTION || sourceType == EntityType.LINGERING_POTION) {
+            return new WorldGuardFlag[] { WorldGuardFlag.POTION_SPLASH };
+        }
+        if (sourceType == EntityType.WIND_CHARGE || sourceType == EntityType.BREEZE_WIND_CHARGE) {
+            return windChargeDamageFlags(sourceType);
+        }
+        return new WorldGuardFlag[0];
+    }
+
     public static BlockPos bucketMutationTarget(ItemStack stack, BlockPos clicked, Direction direction) {
         return bucketMutationTarget(bucketContent(stack), clicked, direction);
     }
@@ -530,6 +700,19 @@ public final class WorldGuardProtectionHooks {
         if (regions == null || world == null || pos == null) {
             return false;
         }
+        if (usesBuildOverride(flags)) {
+            return !WorldGuardPolicy.evaluateBuild(
+                regions,
+                world,
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                null,
+                List.of(),
+                false,
+                flags
+            ).allowed();
+        }
         for (WorldGuardFlag flag : flags) {
             if (flag == null) {
                 continue;
@@ -545,6 +728,18 @@ public final class WorldGuardProtectionHooks {
                 false
             );
             if (!decision.allowed()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean usesBuildOverride(WorldGuardFlag... flags) {
+        if (flags == null || flags.length < 2) {
+            return false;
+        }
+        for (WorldGuardFlag flag : flags) {
+            if (flag == WorldGuardFlag.BUILD) {
                 return true;
             }
         }
@@ -567,6 +762,49 @@ public final class WorldGuardProtectionHooks {
 
     static WorldGuardFlag[] vehiclePlaceFlags() {
         return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.VEHICLE_PLACE };
+    }
+
+    static WorldGuardFlag[] rideFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.RIDE, WorldGuardFlag.INTERACT };
+    }
+
+    static WorldGuardFlag[] blockPlacementFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE };
+    }
+
+    static WorldGuardFlag[] tntPlacementFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.TNT };
+    }
+
+    static WorldGuardFlag[] lighterFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE, WorldGuardFlag.LIGHTER };
+    }
+
+    static WorldGuardFlag[] itemUseFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE };
+    }
+
+    static WorldGuardFlag[] potionSplashFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE, WorldGuardFlag.POTION_SPLASH };
+    }
+
+    static WorldGuardFlag[] windChargeUseFlags() {
+        return new WorldGuardFlag[] {
+            WorldGuardFlag.ITEM_USE,
+            WorldGuardFlag.USE,
+            WorldGuardFlag.WIND_CHARGE_BURST
+        };
+    }
+
+    static WorldGuardFlag[] fireworkDamageFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.FIREWORK_DAMAGE };
+    }
+
+    static WorldGuardFlag[] windChargeDamageFlags(EntityType<?> sourceType) {
+        if (sourceType == EntityType.BREEZE_WIND_CHARGE) {
+            return new WorldGuardFlag[] { WorldGuardFlag.BREEZE_WIND_CHARGE };
+        }
+        return new WorldGuardFlag[] { WorldGuardFlag.WIND_CHARGE_BURST };
     }
 
     static WorldGuardFlag[] entityPlaceFlags() {

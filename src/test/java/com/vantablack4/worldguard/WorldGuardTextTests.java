@@ -102,6 +102,8 @@ final class WorldGuardTextTests {
             .isEqualTo("Hey! Sorry, but you can't open that here.");
         assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.PVP).message())
             .isEqualTo("Hey! Sorry, but you can't PvP here.");
+        assertThat(WorldGuardText.denyMessage("You cannot %what% in this area.", "use anchors"))
+            .isEqualTo("You cannot use anchors in this area.");
         assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.VEHICLE_PLACE).message())
             .isEqualTo("Hey! Sorry, but you can't place vehicles here.");
         assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.VEHICLE_DESTROY).message())

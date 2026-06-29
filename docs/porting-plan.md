@@ -30,8 +30,11 @@ and server-event behavior needed by the Vantablack server.
   selections.
 - Fabric event hooks for block break, block attack, block use/place attempts,
   item use, bucket place/pickup internals, chest/container access on blocks and
-  entities, entity use, entity attack, non-player entity damage, mob spawning,
-  explosions, fire, fluids, pistons, practical Enderman/Ravager grief,
+  entities, double-chest endpoint checks, entity use, direct ride interactions,
+  entity attack, non-player entity damage, potion/firework/wind-charge projectile
+  damage, mob spawning, explosions, TNT/lighter actions, anvil, bed, respawn
+  anchor, and big-dripleaf interactions, fire, fluids, pistons, practical
+  Enderman/Ravager grief,
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   use, chat send/receive filtering, sleep, PvP, fall damage, natural health
@@ -42,6 +45,9 @@ and server-event behavior needed by the Vantablack server.
   and fade mutations.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
   flags.
+- Upstream-style build action semantics for checked flag sets: specific action
+  allows can pass through a broader `build deny`, while specific denies still
+  win.
 - Runtime typed flag effects for greeting/farewell messages, custom deny
   messages, blocked/allowed player commands, game mode, heal/feed, deny-spawn,
   player-scoped weather/time locks, respawn handling for the spawn location
@@ -56,7 +62,14 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Replace the Fabric-native group-permission bridge with direct LuckPerms group
   lookup if Vantablack adopts LuckPerms as a hard dependency.
 - Continue command parity work for remaining upstream flags/options, including
-  `/region info` options.
+  `/region info -w/-u/-s` forms and remaining explicit `-w` world-targeted
+  mutator forms.
+- Add remaining high-friction event parity where Fabric needs targeted mixins:
+  dispenser/dropper synthetic item/block actions, lectern book-take protection,
+  entity-triggered dripleaf tilt, full non-damaging potion-effect paths, and
+  mount/dismount edge cases beyond direct ride use.
+- Continue command output parity for Bukkit WorldGuard's richer text/clickable
+  pagination and exact formatting.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
 

@@ -143,6 +143,19 @@ public final class WorldGuardSessionRules {
         }
 
         List<WorldGuardRegion> regionList = regionList(regions);
+        if (usesBuildOverride(flags)) {
+            return WorldGuardPolicy.evaluateBuild(
+                regionList,
+                world,
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                playerUuid,
+                playerGroups,
+                false,
+                flags
+            );
+        }
         for (WorldGuardFlag flag : flags) {
             if (flag == null) {
                 continue;
@@ -163,6 +176,18 @@ public final class WorldGuardSessionRules {
             }
         }
         return ProtectionDecision.allow();
+    }
+
+    private static boolean usesBuildOverride(WorldGuardFlag... flags) {
+        if (flags == null || flags.length < 2) {
+            return false;
+        }
+        for (WorldGuardFlag flag : flags) {
+            if (flag == WorldGuardFlag.BUILD) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static Optional<String> enabledRegion(
