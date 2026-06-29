@@ -803,6 +803,19 @@ public final class WorldGuardCommands {
         return setRegionFlag(context, getString(context, ID_ARGUMENT), getString(context, VALUE_ARGUMENT));
     }
 
+    private int setEmptyFlag(CommandContext<CommandSourceStack> context) {
+        return setRegionFlag(context, getString(context, ID_ARGUMENT), "");
+    }
+
+    private int flagHelp(CommandContext<CommandSourceStack> context) {
+        if (flagTarget(context) == null) {
+            return 0;
+        }
+        return findExistingRegion(context, getString(context, ID_ARGUMENT), true)
+            .map(region -> sendRegionFlags(context, region, flagsPage(context)))
+            .orElse(0);
+    }
+
     private int setRegionFlag(CommandContext<CommandSourceStack> context, String rawId, String rawValue) {
         FlagTarget target = flagTarget(context);
         if (target == null) {
@@ -1406,10 +1419,15 @@ public final class WorldGuardCommands {
         return Commands.argument(FLAG_ARGUMENT, StringArgumentType.word())
             .suggests(this::suggestFlags)
             .executes(this::clearRegionFlag)
+            .then(Commands.literal("-e").executes(this::setEmptyFlag))
+            .then(Commands.literal("-h")
+                .then(Commands.argument(LIST_PAGE_ARGUMENT, IntegerArgumentType.integer(1))
+                    .executes(this::flagHelp)))
             .then(valueArgument().executes(this::setFlag))
             .then(Commands.literal("-g")
                 .then(groupArgument()
                     .executes(this::setFlagGroup)
+                    .then(Commands.literal("-e").executes(this::setEmptyFlag))
                     .then(valueArgument().executes(this::setFlag))));
     }
 

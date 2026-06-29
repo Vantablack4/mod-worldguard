@@ -117,6 +117,8 @@ Not included yet:
 /region flags -w <world> -p <page> <region>
 /region flag <region> <flag> [allow|deny|unset]
 /region flag -w <world> <region> <flag> [allow|deny|unset]
+/region flag <region> <typed-string-flag> -e
+/region flag <region> <flag> -h <page>
 /region flag <region> <flag> -g <members|owners|nonmembers|nonowners|all|none>
 /region flag <region> <typed-flag> <value>
 /region flag <region> <typed-flag> -g <group> <value>

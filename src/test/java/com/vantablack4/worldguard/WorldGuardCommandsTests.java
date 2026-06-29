@@ -431,12 +431,15 @@ final class WorldGuardCommandsTests {
             .getChild("region")
             .getChild("flag");
         assertThat(flag.getChild("value")).isNotNull();
+        assertThat(flag.getChild("-e")).isNotNull();
+        assertThat(flag.getChild("-h").getChild("page")).isNotNull();
 
         CommandNode<CommandSourceStack> groupLiteral = flag.getChild("-g");
         assertThat(groupLiteral).isNotNull();
         CommandNode<CommandSourceStack> group = groupLiteral.getChild("group");
         assertThat(group).isNotNull();
         assertThat(group.getChild("value")).isNotNull();
+        assertThat(group.getChild("-e")).isNotNull();
 
         assertThat(root(dispatcher, "rg")
             .getChild("flag")
@@ -451,6 +454,8 @@ final class WorldGuardCommandsTests {
             .getChild("region")
             .getChild("flag");
         assertThat(worldFlag.getChild("value")).isNotNull();
+        assertThat(worldFlag.getChild("-e")).isNotNull();
+        assertThat(worldFlag.getChild("-h").getChild("page")).isNotNull();
         assertThat(worldFlag.getChild("-g").getChild("group").getChild("value")).isNotNull();
     }
 
