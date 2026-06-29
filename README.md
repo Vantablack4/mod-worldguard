@@ -106,7 +106,11 @@ Not included yet:
 /region tp -s <region>
 /region tp -c <region>
 /region remove <region>
+/region remove -f <region>
+/region remove -u <region>
 /region remove -w <world> <region>
+/region remove -w <world> -f <region>
+/region remove -w <world> -u <region>
 /region flags <region>
 /region flags -w <world> <region>
 /region flag <region> <flag> [allow|deny|unset]
@@ -150,6 +154,10 @@ rejected by commands that define or reshape physical regions, set priority, or
 set parents, matching upstream WorldGuard behavior.
 Existing-region commands that support `-w <world>` expect the world switch
 before the region argument, matching the Brigadier forms listed above.
+`/region remove`, `/region delete`, `/region del`, and `/region rem` reject
+parent regions with child regions unless `-f` is supplied to remove descendants
+or `-u` is supplied to unset the direct children parent value; `-f` and `-u`
+cannot be used together.
 
 Mutating commands accept upstream-style Fabric permission identifiers like
 `worldguard:region.define`, `worldguard:region.claim`,
