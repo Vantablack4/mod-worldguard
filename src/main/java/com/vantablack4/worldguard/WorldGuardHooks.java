@@ -15,6 +15,8 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -68,11 +70,21 @@ public final class WorldGuardHooks {
 
             BlockPos clicked = hitResult.getBlockPos();
             BlockPos placementTarget = clicked.relative(hitResult.getDirection());
-            if (player.getItemInHand(hand).getItem() instanceof BlockItem
+            var stack = player.getItemInHand(hand);
+            if (stack.getItem() instanceof BlockItem
                 && denyAny(serverPlayer, world, placementTarget, WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE)) {
                 return InteractionResult.FAIL;
             }
-            if (!player.getItemInHand(hand).isEmpty()
+            BlockPos bucketTarget = WorldGuardProtectionHooks.bucketMutationTarget(stack, clicked, hitResult.getDirection());
+            if (bucketTarget != null
+                && denyAny(serverPlayer, world, bucketTarget, WorldGuardProtectionHooks.bucketMutationFlags(world, stack, clicked))) {
+                return InteractionResult.FAIL;
+            }
+            if (WorldGuardProtectionHooks.isContainerAccess(world, clicked)
+                && denyAny(serverPlayer, world, clicked, WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE)) {
+                return InteractionResult.FAIL;
+            }
+            if (!stack.isEmpty()
                 && denyAny(serverPlayer, world, clicked, WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE)) {
                 return InteractionResult.FAIL;
             }
@@ -85,6 +97,15 @@ public final class WorldGuardHooks {
             if (!(player instanceof ServerPlayer serverPlayer) || player.getItemInHand(hand).isEmpty()) {
                 return InteractionResult.PASS;
             }
+            ItemStack stack = player.getItemInHand(hand);
+            if (stack.getItem() == Items.ENDER_PEARL
+                && denyAny(serverPlayer, world, player.blockPosition(), WorldGuardFlag.ENDERPEARL, WorldGuardFlag.EXIT_VIA_TELEPORT)) {
+                return InteractionResult.FAIL;
+            }
+            if (stack.getItem() == Items.CHORUS_FRUIT
+                && denyAny(serverPlayer, world, player.blockPosition(), WorldGuardFlag.CHORUS_TELEPORT, WorldGuardFlag.EXIT_VIA_TELEPORT)) {
+                return InteractionResult.FAIL;
+            }
             return denyAny(serverPlayer, world, player.blockPosition(), WorldGuardFlag.ITEM_USE, WorldGuardFlag.USE)
                 ? InteractionResult.FAIL
                 : InteractionResult.PASS;
@@ -93,6 +114,10 @@ public final class WorldGuardHooks {
         UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (!(player instanceof ServerPlayer serverPlayer)) {
                 return InteractionResult.PASS;
+            }
+            if (WorldGuardProtectionHooks.isEntityContainerAccess(entity)
+                && denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE_ENTITY)) {
+                return InteractionResult.FAIL;
             }
             return denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.USE_ENTITY)
                 ? InteractionResult.FAIL

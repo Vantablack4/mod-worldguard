@@ -3,6 +3,7 @@ package com.vantablack4.worldguard;
 import com.vantablack4.worldguard.model.RegionDomain;
 import com.vantablack4.worldguard.model.RegionType;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
@@ -260,8 +261,16 @@ public record WorldGuardRegion(
         return playerUuid != null && owners.contains(playerUuid);
     }
 
+    public boolean owner(UUID playerUuid, Collection<String> playerGroups) {
+        return ownersDomain().contains(playerUuid, playerGroups);
+    }
+
     public boolean member(UUID playerUuid) {
         return playerUuid != null && (members.contains(playerUuid) || owners.contains(playerUuid));
+    }
+
+    public boolean member(UUID playerUuid, Collection<String> playerGroups) {
+        return owner(playerUuid, playerGroups) || membersDomain().contains(playerUuid, playerGroups);
     }
 
     public RegionDomain ownersDomain() {
@@ -307,6 +316,18 @@ public record WorldGuardRegion(
         return copy(parentId, type, updated, members, ownerGroups, memberGroups, flags);
     }
 
+    public WorldGuardRegion withOwnerGroup(String group) {
+        java.util.HashSet<String> updated = new java.util.HashSet<>(ownerGroups);
+        updated.addAll(RegionDomain.normalizeGroups(Set.of(group)));
+        return copy(parentId, type, owners, members, updated, memberGroups, flagsForGlobalMembership(flags));
+    }
+
+    public WorldGuardRegion withoutOwnerGroup(String group) {
+        java.util.HashSet<String> updated = new java.util.HashSet<>(ownerGroups);
+        updated.removeAll(RegionDomain.normalizeGroups(Set.of(group)));
+        return copy(parentId, type, owners, members, updated, memberGroups, flags);
+    }
+
     public WorldGuardRegion withMember(UUID playerUuid) {
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.add(playerUuid);
@@ -317,6 +338,18 @@ public record WorldGuardRegion(
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.remove(playerUuid);
         return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flags);
+    }
+
+    public WorldGuardRegion withMemberGroup(String group) {
+        java.util.HashSet<String> updated = new java.util.HashSet<>(memberGroups);
+        updated.addAll(RegionDomain.normalizeGroups(Set.of(group)));
+        return copy(parentId, type, owners, members, ownerGroups, updated, flagsForGlobalMembership(flags));
+    }
+
+    public WorldGuardRegion withoutMemberGroup(String group) {
+        java.util.HashSet<String> updated = new java.util.HashSet<>(memberGroups);
+        updated.removeAll(RegionDomain.normalizeGroups(Set.of(group)));
+        return copy(parentId, type, owners, members, ownerGroups, updated, flags);
     }
 
     public String boundsDisplay() {

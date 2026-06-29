@@ -1,7 +1,9 @@
 package com.vantablack4.worldguard;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.ChatFormatting;
@@ -29,15 +31,18 @@ public final class WorldGuardService {
 
     public ProtectionDecision checkAny(ServerPlayer player, String world, BlockPos pos, WorldGuardFlag... flags) {
         boolean bypass = isAdmin(player);
+        List<WorldGuardRegion> regions = storage.regions(world);
+        Set<String> groups = WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions);
         for (WorldGuardFlag flag : flags) {
             ProtectionDecision decision = WorldGuardPolicy.evaluate(
-                storage.regions(world),
+                regions,
                 world,
                 pos.getX(),
                 pos.getY(),
                 pos.getZ(),
                 flag,
                 player.getUUID(),
+                groups,
                 bypass
             );
             if (!decision.allowed()) {
@@ -48,16 +53,22 @@ public final class WorldGuardService {
     }
 
     public ProtectionDecision check(ServerPlayer player, WorldGuardFlag flag, String world, int x, int y, int z) {
+        List<WorldGuardRegion> regions = storage.regions(world);
         return WorldGuardPolicy.evaluate(
-            storage.regions(world),
+            regions,
             world,
             x,
             y,
             z,
             flag,
             player.getUUID(),
+            WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions),
             isAdmin(player)
         );
+    }
+
+    public Set<String> regionGroups(ServerPlayer player, List<WorldGuardRegion> regions) {
+        return WorldGuardPermissions.regionGroups(player.createCommandSourceStack(), regions);
     }
 
     public boolean deny(ServerPlayer player, ProtectionDecision decision) {

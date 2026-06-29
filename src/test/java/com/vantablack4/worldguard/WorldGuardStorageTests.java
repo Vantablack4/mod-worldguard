@@ -131,6 +131,51 @@ final class WorldGuardStorageTests {
     }
 
     @Test
+    void mutatesOwnerAndMemberGroupsByWorld() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(new WorldGuardRegion(
+            "town",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            4,
+            Set.of(),
+            Map.of()
+        ));
+        storage.save(new WorldGuardRegion(
+            "town",
+            "minecraft:the_nether",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            4,
+            Set.of(),
+            Map.of()
+        ));
+
+        storage.addOwnerGroup("town", "minecraft:overworld", "g:Mayor");
+        storage.addMemberGroup("town", "minecraft:overworld", "group:Resident");
+        storage.addMemberGroup("town", "minecraft:the_nether", "visitor");
+        storage.removeMemberGroup("town", "minecraft:overworld", "resident");
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+
+        WorldGuardRegion overworld = reloaded.find("town", "minecraft:overworld").orElseThrow();
+        WorldGuardRegion nether = reloaded.find("town", "minecraft:the_nether").orElseThrow();
+        assertThat(overworld.ownerGroups()).containsExactly("mayor");
+        assertThat(overworld.memberGroups()).isEmpty();
+        assertThat(nether.ownerGroups()).isEmpty();
+        assertThat(nether.memberGroups()).containsExactly("visitor");
+    }
+
+    @Test
     void roundTripsPolygonRegionsWithBoundingProperties() throws IOException {
         WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
         storage.save(WorldGuardRegion.defaultProtectedPolygon(

@@ -5,7 +5,9 @@ import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.StringJoiner;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import com.mojang.brigadier.Command;
@@ -16,6 +18,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 
@@ -27,7 +30,12 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import com.vantablack4.worldguard.worldedit.WorldEditRegionSelection;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
@@ -39,7 +47,10 @@ public final class WorldGuardCommands {
     private static final String FLAG_ARGUMENT = "flag";
     private static final String STATE_ARGUMENT = "state";
     private static final String PLAYER_ARGUMENT = "player";
+    private static final String DOMAIN_ARGUMENT = "domain";
     private static final String PRIORITY_ARGUMENT = "priority";
+    private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
+        new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
     private final WorldGuardConfig config;
     private final WorldGuardStorage storage;
@@ -112,6 +123,9 @@ public final class WorldGuardCommands {
             .then(Commands.literal("create")
                 .requires(this::isAdmin)
                 .then(defineArguments()))
+            .then(Commands.literal("claim")
+                .requires(this::isAdmin)
+                .then(regionArgument().executes(this::claimFromWorldEditSelection)))
             .then(Commands.literal("redefine")
                 .requires(this::isAdmin)
                 .then(redefineArguments()))
@@ -133,6 +147,10 @@ public final class WorldGuardCommands {
             .then(Commands.literal("rem")
                 .requires(this::isAdmin)
                 .then(regionArgument().executes(this::delete)))
+            .then(Commands.literal("teleport")
+                .then(regionArgument().executes(this::teleport)))
+            .then(Commands.literal("tp")
+                .then(regionArgument().executes(this::teleport)))
             .then(Commands.literal("flags")
                 .executes(this::flagsHere)
                 .then(regionArgument().executes(this::regionFlags)))
@@ -162,55 +180,43 @@ public final class WorldGuardCommands {
                 .then(setParentArguments()))
             .then(Commands.literal("addmem")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::addMember)))
+                .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("am")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::addMember)))
-            .then(Commands.literal("owner")
-                .requires(this::isAdmin)
-                .then(Commands.literal("add")
-                    .then(playerRegionArguments(this::addOwner)))
-                .then(Commands.literal("remove")
-                    .then(playerRegionArguments(this::removeOwner))))
-            .then(Commands.literal("member")
-                .requires(this::isAdmin)
-                .then(Commands.literal("add")
-                    .then(playerRegionArguments(this::addMember)))
-                .then(Commands.literal("remove")
-                    .then(playerRegionArguments(this::removeMember))))
+                .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("addowner")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::addOwner)))
+                .then(domainRegionArguments(this::addOwnerDomain)))
             .then(Commands.literal("ao")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::addOwner)))
+                .then(domainRegionArguments(this::addOwnerDomain)))
             .then(Commands.literal("removeowner")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeOwner)))
+                .then(domainRegionArguments(this::removeOwnerDomain)))
             .then(Commands.literal("remowner")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeOwner)))
+                .then(domainRegionArguments(this::removeOwnerDomain)))
             .then(Commands.literal("ro")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeOwner)))
+                .then(domainRegionArguments(this::removeOwnerDomain)))
             .then(Commands.literal("addmember")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::addMember)))
+                .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("removemember")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeMember)))
+                .then(domainRegionArguments(this::removeMemberDomain)))
             .then(Commands.literal("removemem")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeMember)))
+                .then(domainRegionArguments(this::removeMemberDomain)))
             .then(Commands.literal("remmember")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeMember)))
+                .then(domainRegionArguments(this::removeMemberDomain)))
             .then(Commands.literal("remmem")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeMember)))
+                .then(domainRegionArguments(this::removeMemberDomain)))
             .then(Commands.literal("rm")
                 .requires(this::isAdmin)
-                .then(playerRegionArguments(this::removeMember)));
+                .then(domainRegionArguments(this::removeMemberDomain)));
     }
 
     private int help(CommandContext<CommandSourceStack> context) {
@@ -323,6 +329,10 @@ public final class WorldGuardCommands {
         if (id.isBlank()) {
             return 0;
         }
+        if (storage.find(id, worldId(player)).isPresent()) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.regionAlreadyExists(id)));
+            return 0;
+        }
         WorldGuardRegion region = WorldGuardRegion.defaultProtected(
             id,
             worldId(player),
@@ -346,6 +356,10 @@ public final class WorldGuardCommands {
         }
 
         ServerPlayer player = context.getSource().getPlayerOrException();
+        if (storage.find(id, worldId(player)).isPresent()) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.regionAlreadyExists(id)));
+            return 0;
+        }
         WorldEditSelectionResult result = worldEditSelectionSource.selection(player);
         if (!result.hasSelection()) {
             context.getSource().sendSystemMessage(error(result.message()));
@@ -356,6 +370,31 @@ public final class WorldGuardCommands {
         WorldGuardRegion region = selection.toDefaultProtectedRegion(id, priority);
         storage.save(region);
         context.getSource().sendSystemMessage(success(WorldGuardText.createdRegion(id)));
+        return 1;
+    }
+
+    private int claimFromWorldEditSelection(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String id = checkRegionId(context, getString(context, ID_ARGUMENT), false);
+        if (id.isBlank()) {
+            return 0;
+        }
+
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        if (storage.find(id, worldId(player)).isPresent()) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.regionAlreadyExists(id)));
+            return 0;
+        }
+        WorldEditSelectionResult result = worldEditSelectionSource.selection(player);
+        if (!result.hasSelection()) {
+            context.getSource().sendSystemMessage(error(result.message()));
+            return 0;
+        }
+
+        WorldGuardRegion region = result.selection().toDefaultProtectedRegion(id, 0)
+            .withOwner(player.getUUID());
+        storage.save(region);
+        context.getSource().sendSystemMessage(success(WorldGuardText.createdRegion(id)));
+        context.getSource().sendSystemMessage(success(WorldGuardText.ownersAdded(id)));
         return 1;
     }
 
@@ -402,6 +441,35 @@ public final class WorldGuardCommands {
         }
         noRegion(context, id);
         return 0;
+    }
+
+    private int teleport(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        String id = checkRegionId(context, getString(context, ID_ARGUMENT), false);
+        if (id.isBlank()) {
+            return 0;
+        }
+        Optional<WorldGuardRegion> existing = storage.find(id, commandWorld(context));
+        if (existing.isEmpty()) {
+            noRegion(context, id);
+            return 0;
+        }
+
+        WorldGuardRegion region = existing.get();
+        ServerLevel targetLevel = level(context, region.world());
+        if (targetLevel == null) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.worldNotLoaded(region.world())));
+            return 0;
+        }
+
+        double x = center(region.minX(), region.maxX());
+        double y = center(region.minY(), region.maxY());
+        double z = center(region.minZ(), region.maxZ());
+        if (!player.teleportTo(targetLevel, x, y, z, Set.of(), player.getYRot(), player.getXRot(), true)) {
+            return 0;
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.teleportedToRegion(region.id())));
+        return 1;
     }
 
     private int flagsHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -575,12 +643,16 @@ public final class WorldGuardCommands {
 
     private int addOwner(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, PLAYER_ARGUMENT);
+        return addOwner(context, player.getUUID());
+    }
+
+    private int addOwner(CommandContext<CommandSourceStack> context, UUID playerUuid) {
         String id = regionIdForAllowedGlobalCommand(context);
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        return storage.addOwner(id, world, player.getUUID())
+        return storage.addOwner(id, world, playerUuid)
             .map(region -> {
                 context.getSource().sendSystemMessage(success(WorldGuardText.ownersAdded(region.id())));
                 return 1;
@@ -593,12 +665,16 @@ public final class WorldGuardCommands {
 
     private int removeOwner(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, PLAYER_ARGUMENT);
+        return removeOwner(context, player.getUUID());
+    }
+
+    private int removeOwner(CommandContext<CommandSourceStack> context, UUID playerUuid) {
         String id = regionIdForAllowedGlobalCommand(context);
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        return storage.removeOwner(id, world, player.getUUID())
+        return storage.removeOwner(id, world, playerUuid)
             .map(region -> {
                 context.getSource().sendSystemMessage(success(WorldGuardText.ownersRemoved(region.id())));
                 return 1;
@@ -611,12 +687,16 @@ public final class WorldGuardCommands {
 
     private int addMember(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, PLAYER_ARGUMENT);
+        return addMember(context, player.getUUID());
+    }
+
+    private int addMember(CommandContext<CommandSourceStack> context, UUID playerUuid) {
         String id = regionIdForAllowedGlobalCommand(context);
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        return storage.addMember(id, world, player.getUUID())
+        return storage.addMember(id, world, playerUuid)
             .map(region -> {
                 context.getSource().sendSystemMessage(success(WorldGuardText.membersAdded(region.id())));
                 return 1;
@@ -629,12 +709,16 @@ public final class WorldGuardCommands {
 
     private int removeMember(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = EntityArgument.getPlayer(context, PLAYER_ARGUMENT);
+        return removeMember(context, player.getUUID());
+    }
+
+    private int removeMember(CommandContext<CommandSourceStack> context, UUID playerUuid) {
         String id = regionIdForAllowedGlobalCommand(context);
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        return storage.removeMember(id, world, player.getUUID())
+        return storage.removeMember(id, world, playerUuid)
             .map(region -> {
                 context.getSource().sendSystemMessage(success(WorldGuardText.membersRemoved(region.id())));
                 return 1;
@@ -643,6 +727,86 @@ public final class WorldGuardCommands {
                 noRegion(context, id);
                 return 0;
             });
+    }
+
+    private int addOwnerDomain(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        Optional<WorldGuardRegion> updated = Optional.empty();
+        for (DomainArgument domain : domainArguments(context)) {
+            updated = domain.playerUuid() != null
+                ? storage.addOwner(id, world, domain.playerUuid())
+                : storage.addOwnerGroup(id, world, domain.group());
+            if (updated.isEmpty()) {
+                noRegion(context, id);
+                return 0;
+            }
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.ownersAdded(updated.orElseThrow().id())));
+        return 1;
+    }
+
+    private int removeOwnerDomain(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        Optional<WorldGuardRegion> updated = Optional.empty();
+        for (DomainArgument domain : domainArguments(context)) {
+            updated = domain.playerUuid() != null
+                ? storage.removeOwner(id, world, domain.playerUuid())
+                : storage.removeOwnerGroup(id, world, domain.group());
+            if (updated.isEmpty()) {
+                noRegion(context, id);
+                return 0;
+            }
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.ownersRemoved(updated.orElseThrow().id())));
+        return 1;
+    }
+
+    private int addMemberDomain(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        Optional<WorldGuardRegion> updated = Optional.empty();
+        for (DomainArgument domain : domainArguments(context)) {
+            updated = domain.playerUuid() != null
+                ? storage.addMember(id, world, domain.playerUuid())
+                : storage.addMemberGroup(id, world, domain.group());
+            if (updated.isEmpty()) {
+                noRegion(context, id);
+                return 0;
+            }
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.membersAdded(updated.orElseThrow().id())));
+        return 1;
+    }
+
+    private int removeMemberDomain(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        Optional<WorldGuardRegion> updated = Optional.empty();
+        for (DomainArgument domain : domainArguments(context)) {
+            updated = domain.playerUuid() != null
+                ? storage.removeMember(id, world, domain.playerUuid())
+                : storage.removeMemberGroup(id, world, domain.group());
+            if (updated.isEmpty()) {
+                noRegion(context, id);
+                return 0;
+            }
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.membersRemoved(updated.orElseThrow().id())));
+        return 1;
     }
 
     private boolean isAdmin(CommandSourceStack source) {
@@ -661,9 +825,13 @@ public final class WorldGuardCommands {
         return Commands.argument(argumentName, StringArgumentType.word()).suggests(this::suggestRegions);
     }
 
-    private RequiredArgumentBuilder<CommandSourceStack, String> playerRegionArguments(Command<CommandSourceStack> command) {
+    private RequiredArgumentBuilder<CommandSourceStack, String> domainRegionArguments(Command<CommandSourceStack> command) {
         return regionArgument()
-            .then(Commands.argument(PLAYER_ARGUMENT, EntityArgument.player())
+            .then(Commands.argument(DOMAIN_ARGUMENT, StringArgumentType.greedyString())
+                .suggests((context, builder) -> SharedSuggestionProvider.suggest(
+                    context.getSource().getServer().getPlayerNames(),
+                    builder
+                ))
                 .executes(command));
     }
 
@@ -789,6 +957,15 @@ public final class WorldGuardCommands {
         }
     }
 
+    private ServerLevel level(CommandContext<CommandSourceStack> context, String world) {
+        Identifier identifier = Identifier.tryParse(world);
+        if (identifier == null) {
+            return null;
+        }
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, identifier);
+        return context.getSource().getServer().getLevel(key);
+    }
+
     private List<WorldGuardRegion> listRegions(String world) {
         List<WorldGuardRegion> regions = storage.regions(world);
         List<WorldGuardRegion> global = regions.stream().filter(WorldGuardRegion::global).toList();
@@ -809,6 +986,67 @@ public final class WorldGuardCommands {
         context.getSource().sendSystemMessage(error(WorldGuardText.availableFlags()));
     }
 
+    private List<DomainArgument> domainArguments(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        List<DomainArgument> domains = new java.util.ArrayList<>();
+        for (String raw : getString(context, DOMAIN_ARGUMENT).split("\\s+")) {
+            if (!raw.isBlank()) {
+                domains.add(domainArgument(context, raw));
+            }
+        }
+        if (domains.isEmpty()) {
+            throw PLAYER_NOT_FOUND.create();
+        }
+        return List.copyOf(domains);
+    }
+
+    private DomainArgument domainArgument(CommandContext<CommandSourceStack> context, String raw) throws CommandSyntaxException {
+        String group = groupName(raw);
+        if (!group.isBlank()) {
+            return new DomainArgument(null, group);
+        }
+        String uuid = uuidName(raw);
+        if (!uuid.isBlank()) {
+            try {
+                return new DomainArgument(UUID.fromString(uuid), "");
+            } catch (IllegalArgumentException exception) {
+                throw PLAYER_NOT_FOUND.create();
+            }
+        }
+        ServerPlayer player = context.getSource().getServer().getPlayerList().getPlayerByName(raw);
+        if (player == null) {
+            throw PLAYER_NOT_FOUND.create();
+        }
+        return new DomainArgument(player.getUUID(), "");
+    }
+
+    private static String groupName(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.regionMatches(true, 0, "g:", 0, 2)) {
+            trimmed = trimmed.substring(2).trim();
+        } else if (trimmed.regionMatches(true, 0, "group:", 0, 6)) {
+            trimmed = trimmed.substring(6).trim();
+        } else {
+            return "";
+        }
+        return trimmed.isBlank() ? "" : com.vantablack4.worldguard.model.RegionDomain.normalizeGroup(trimmed);
+    }
+
+    private static String uuidName(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.regionMatches(true, 0, "uuid:", 0, 5)) {
+            trimmed = trimmed.substring(5).trim();
+        }
+        return trimmed.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            ? trimmed
+            : "";
+    }
+
     private static String flagsDisplay(WorldGuardRegion region) {
         StringJoiner flags = new StringJoiner(", ");
         for (WorldGuardFlag flag : WorldGuardFlag.values()) {
@@ -823,6 +1061,10 @@ public final class WorldGuardCommands {
 
     private static String worldId(ServerPlayer player) {
         return player.level().dimension().identifier().toString();
+    }
+
+    private static double center(int min, int max) {
+        return ((double) min + (double) max) / 2.0D + 0.5D;
     }
 
     private static WorldGuardRegion copyWithPriority(WorldGuardRegion region, int priority) {
@@ -884,5 +1126,8 @@ public final class WorldGuardCommands {
 
     private static Component error(String text) {
         return Component.literal(text).withStyle(ChatFormatting.RED);
+    }
+
+    private record DomainArgument(UUID playerUuid, String group) {
     }
 }

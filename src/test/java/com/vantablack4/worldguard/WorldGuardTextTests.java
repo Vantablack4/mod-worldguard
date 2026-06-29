@@ -21,10 +21,17 @@ final class WorldGuardTextTests {
             .isEqualTo("You're standing in several regions (please pick one).");
         assertThat(WorldGuardText.createdRegion("spawn"))
             .isEqualTo("A new region has been made named 'spawn'.");
+        assertThat(WorldGuardText.regionAlreadyExists("spawn"))
+            .isEqualTo("A region with that name already exists. Please choose another name."
+                + " To change the shape, use /region redefine spawn.");
         assertThat(WorldGuardText.updatedRegionArea("spawn"))
             .isEqualTo("Region 'spawn' has been updated with a new area.");
         assertThat(WorldGuardText.removedRegions("spawn"))
             .isEqualTo("Successfully removed spawn.");
+        assertThat(WorldGuardText.teleportedToRegion("spawn"))
+            .isEqualTo("Teleported you to the 'spawn' region.");
+        assertThat(WorldGuardText.worldNotLoaded("minecraft:missing"))
+            .isEqualTo("World 'minecraft:missing' is not loaded.");
         assertThat(WorldGuardText.unknownFlag("badflag"))
             .isEqualTo("Unknown flag specified: badflag");
         assertThat(WorldGuardText.invalidStateFlag("maybe"))

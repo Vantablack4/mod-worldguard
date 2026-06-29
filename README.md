@@ -17,14 +17,19 @@ Included in the Fabric port:
 
 - Cuboid regions stored per dimension.
 - Cuboid, polygonal 2D, and global regions stored per dimension.
-- Region priority, owners, members, parent inheritance, and explicit state flags.
+- Region priority, owners, members, owner/member groups, parent inheritance, and
+  explicit state flags.
 - `/wg`, `/worldguard`, `/region`, `/regions`, and `/rg` commands.
 - Protection hooks for block break, block attack, block use/place attempts,
-  item use, entity use, entity attack, explosions, fire spread, fluid flow,
-  pistons, Enderman/Ravager grief, movement entry/exit, chat send, sleep, PvP,
-  fall damage, invincibility, item drop, and item pickup.
+  item use, bucket placement/pickup, chest/container access for blocks and
+  entities, entity use, entity attack, non-player entity damage, mob spawning,
+  explosions, fire spread, fluid flow, pistons, Enderman/Ravager grief,
+  movement entry/exit, teleport entry/exit, ender pearl and chorus teleport
+  use, chat send, sleep, PvP, fall damage, invincibility, item drop, and item
+  pickup.
 - Fabric permission API integration for `mod_worldguard:admin` and
-  `mod_worldguard:bypass`.
+  `mod_worldguard:bypass`, plus region group matching through
+  `mod_worldguard:region.group.<group>` permission nodes.
 - Optional WorldEdit Fabric selection import for cuboid and polygonal region
   definition.
 - Default protected regions deny `build`, `block-break`, `block-place`, `use`,
@@ -35,10 +40,13 @@ Not included yet:
 
 - Full WorldGuard Bukkit API compatibility.
 - Typed non-state flags like string, set, location, and numeric flags.
-- Group resolution against LuckPerms/Fabric permission groups.
-- Teleport-specific movement flags, recipient chat filtering, portals,
-  crop-trampling, hanging-entity destruction, lightning/weather, growth/decay,
-  and full WorldGuard Bukkit API compatibility.
+- LuckPerms-native group lookup beyond Fabric permission nodes.
+- Upstream command options that are not yet represented by Brigadier flags:
+  `-w`, `-g`, `-n`, `-a`, paging/filtering options, `/rg select`, and
+  `/rg toggle-bypass`.
+- Recipient chat filtering, portals, crop-trampling, pressure plates,
+  lightning/weather, growth/decay, hoppers, and dragon/wither non-explosion
+  block damage.
 
 ## Commands
 
@@ -52,16 +60,19 @@ Not included yet:
 /region define <region>
 /region define <region> selection [priority]
 /region define <region> <x1> <y1> <z1> <x2> <y2> <z2> [priority]
+/region claim <region>
 /region redefine <region>
+/region teleport <region>
+/region tp <region>
 /region remove <region>
 /region flags <region>
 /region flag <region> <flag> [allow|deny|unset]
 /region setpriority <region> <priority>
 /region setparent <region> [parent]
-/region addowner <region> <player>
-/region removeowner <region> <player>
-/region addmember <region> <player>
-/region removemember <region> <player>
+/region addowner <region> <player|uuid:<uuid>|g:<group>> [...]
+/region removeowner <region> <player|uuid:<uuid>|g:<group>> [...]
+/region addmember <region> <player|uuid:<uuid>|g:<group>> [...]
+/region removemember <region> <player|uuid:<uuid>|g:<group>> [...]
 /region load
 /region save
 ```
@@ -81,7 +92,8 @@ set parents, matching upstream WorldGuard behavior.
 
 Mutating commands require `mod_worldguard:admin`, falling back to the configured
 admin permission level. Protection bypass checks `mod_worldguard:bypass`, also
-falling back to the configured admin permission level.
+falling back to the configured admin permission level. Region owner/member
+groups match players that have `mod_worldguard:region.group.<group>`.
 
 When WorldEdit is installed, `/region define <region>` imports the executing
 player's complete WorldEdit cuboid or polygonal selection. `/region define <region>
@@ -112,6 +124,14 @@ send-chat
 sleep
 item-drop
 item-pickup
+mob-spawning
+mob-damage
+damage-animals
+entity-painting-destroy
+entity-item-frame-destroy
+exit-via-teleport
+enderpearl
+chorus-fruit-teleport
 entry
 exit
 notify-enter

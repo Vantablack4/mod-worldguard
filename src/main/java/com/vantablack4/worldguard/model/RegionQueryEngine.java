@@ -92,6 +92,19 @@ public final class RegionQueryEngine {
         WorldGuardFlag flag,
         UUID playerUuid
     ) {
+        return queryState(regions, world, x, y, z, flag, playerUuid, Set.of());
+    }
+
+    public static FlagEvaluation queryState(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        int x,
+        int y,
+        int z,
+        WorldGuardFlag flag,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
         List<WorldGuardRegion> scoped = regions == null ? List.of() : regions.stream()
             .filter(region -> region.appliesToWorld(world))
             .toList();
@@ -99,13 +112,13 @@ public final class RegionQueryEngine {
         List<WorldGuardRegion> applicable = new ArrayList<>(applicableRegions(scoped, world, x, y, z));
         globalRegion(scoped, world).ifPresent(applicable::add);
 
-        FlagEvaluation explicit = queryExplicitState(applicable, byId, flag, playerUuid);
+        FlagEvaluation explicit = queryExplicitState(applicable, byId, flag, playerUuid, playerGroups);
         if (explicit.state() != FlagState.UNSET) {
             return explicit;
         }
 
         if (flag.usesMembershipDefault()) {
-            FlagEvaluation membership = queryMembershipDefault(applicable, byId, flag, playerUuid);
+            FlagEvaluation membership = queryMembershipDefault(applicable, byId, flag, playerUuid, playerGroups);
             if (membership.state() != FlagState.UNSET) {
                 return membership;
             }
@@ -119,13 +132,22 @@ public final class RegionQueryEngine {
     }
 
     public static boolean owner(WorldGuardRegion region, Map<String, WorldGuardRegion> byId, UUID playerUuid) {
-        if (playerUuid == null || region == null) {
+        return owner(region, byId, playerUuid, Set.of());
+    }
+
+    public static boolean owner(
+        WorldGuardRegion region,
+        Map<String, WorldGuardRegion> byId,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
+        if (!hasAssociation(playerUuid, playerGroups) || region == null) {
             return false;
         }
         Set<String> seen = new HashSet<>();
         WorldGuardRegion current = region;
         while (current != null && seen.add(current.id())) {
-            if (current.owner(playerUuid)) {
+            if (current.owner(playerUuid, playerGroups)) {
                 return true;
             }
             current = parent(current, byId).orElse(null);
@@ -134,16 +156,25 @@ public final class RegionQueryEngine {
     }
 
     public static boolean member(WorldGuardRegion region, Map<String, WorldGuardRegion> byId, UUID playerUuid) {
-        if (playerUuid == null || region == null) {
+        return member(region, byId, playerUuid, Set.of());
+    }
+
+    public static boolean member(
+        WorldGuardRegion region,
+        Map<String, WorldGuardRegion> byId,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
+        if (!hasAssociation(playerUuid, playerGroups) || region == null) {
             return false;
         }
-        if (owner(region, byId, playerUuid)) {
+        if (owner(region, byId, playerUuid, playerGroups)) {
             return true;
         }
         Set<String> seen = new HashSet<>();
         WorldGuardRegion current = region;
         while (current != null && seen.add(current.id())) {
-            if (current.member(playerUuid)) {
+            if (current.member(playerUuid, playerGroups)) {
                 return true;
             }
             current = parent(current, byId).orElse(null);
@@ -167,7 +198,8 @@ public final class RegionQueryEngine {
         List<WorldGuardRegion> applicable,
         Map<String, WorldGuardRegion> byId,
         WorldGuardFlag flag,
-        UUID playerUuid
+        UUID playerUuid,
+        Collection<String> playerGroups
     ) {
         int minimumPriority = Integer.MIN_VALUE;
         Set<String> ignoredParents = new HashSet<>();
@@ -186,7 +218,9 @@ public final class RegionQueryEngine {
             if (evaluation.state() != FlagState.UNSET) {
                 minimumPriority = priority;
                 FlagState state = evaluation.state();
-                if (state == FlagState.DENY && flag.bypassesMemberDeny() && member(region, byId, playerUuid)) {
+                if (state == FlagState.DENY
+                    && flag.bypassesMemberDeny()
+                    && member(region, byId, playerUuid, playerGroups)) {
                     state = FlagState.ALLOW;
                 }
                 considered.add(new FlagEvaluation(state, region.id(), evaluation.sourceRegionId()));
@@ -216,9 +250,10 @@ public final class RegionQueryEngine {
         List<WorldGuardRegion> applicable,
         Map<String, WorldGuardRegion> byId,
         WorldGuardFlag flag,
-        UUID playerUuid
+        UUID playerUuid,
+        Collection<String> playerGroups
     ) {
-        if (playerUuid == null) {
+        if (!hasAssociation(playerUuid, playerGroups)) {
             return FlagEvaluation.unset();
         }
 
@@ -247,7 +282,7 @@ public final class RegionQueryEngine {
         }
 
         for (WorldGuardRegion region : counted) {
-            if (!member(region, byId, playerUuid)) {
+            if (!member(region, byId, playerUuid, playerGroups)) {
                 return new FlagEvaluation(FlagState.DENY, region.id(), region.id());
             }
         }
@@ -318,6 +353,14 @@ public final class RegionQueryEngine {
         while (parent != null && ignored.add(parent.id())) {
             parent = parent(parent, byId).orElse(null);
         }
+    }
+
+    private static boolean hasAssociation(UUID playerUuid, Collection<String> playerGroups) {
+        return playerUuid != null || hasGroups(playerGroups);
+    }
+
+    private static boolean hasGroups(Collection<String> playerGroups) {
+        return playerGroups != null && playerGroups.stream().anyMatch(group -> group != null && !group.isBlank());
     }
 
     public record FlagEvaluation(

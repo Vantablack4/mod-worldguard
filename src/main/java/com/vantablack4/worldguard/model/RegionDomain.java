@@ -27,6 +27,22 @@ public record RegionDomain(
         return uniqueId != null && uniqueIds.contains(uniqueId);
     }
 
+    public boolean contains(UUID uniqueId, Collection<String> candidateGroups) {
+        return contains(uniqueId) || containsAnyGroup(candidateGroups);
+    }
+
+    public boolean containsAnyGroup(Collection<String> candidateGroups) {
+        if (groups.isEmpty() || candidateGroups == null || candidateGroups.isEmpty()) {
+            return false;
+        }
+        for (String group : normalizeGroups(candidateGroups)) {
+            if (groups.contains(group)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean emptyDomain() {
         return uniqueIds.isEmpty() && groups.isEmpty();
     }
@@ -49,7 +65,7 @@ public record RegionDomain(
         return new RegionDomain(updated, groups);
     }
 
-    private static Set<String> normalizeGroups(Collection<String> rawGroups) {
+    public static Set<String> normalizeGroups(Collection<String> rawGroups) {
         if (rawGroups == null || rawGroups.isEmpty()) {
             return Set.of();
         }
@@ -58,8 +74,24 @@ public record RegionDomain(
             if (group == null || group.isBlank()) {
                 continue;
             }
-            normalized.add(group.trim().toLowerCase(Locale.ROOT));
+            String normalizedGroup = normalizeGroup(group);
+            if (!normalizedGroup.isBlank()) {
+                normalized.add(normalizedGroup);
+            }
         }
         return Set.copyOf(normalized);
+    }
+
+    public static String normalizeGroup(String group) {
+        if (group == null) {
+            return "";
+        }
+        String trimmed = group.trim();
+        if (trimmed.regionMatches(true, 0, "g:", 0, 2)) {
+            trimmed = trimmed.substring(2).trim();
+        } else if (trimmed.regionMatches(true, 0, "group:", 0, 6)) {
+            trimmed = trimmed.substring(6).trim();
+        }
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 }

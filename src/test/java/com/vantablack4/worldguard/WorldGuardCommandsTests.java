@@ -48,9 +48,12 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("def")).isNotNull();
             assertThat(root.getChild("d")).isNotNull();
             assertThat(root.getChild("create")).isNotNull();
+            assertThat(root.getChild("claim")).isNotNull();
             assertThat(root.getChild("redefine")).isNotNull();
             assertThat(root.getChild("update")).isNotNull();
             assertThat(root.getChild("move")).isNotNull();
+            assertThat(root.getChild("teleport")).isNotNull();
+            assertThat(root.getChild("tp")).isNotNull();
             assertThat(root.getChild("flag")).isNotNull();
             assertThat(root.getChild("f")).isNotNull();
             assertThat(root.getChild("setpriority")).isNotNull();
@@ -72,6 +75,44 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("remmember")).isNotNull();
             assertThat(root.getChild("remmem")).isNotNull();
             assertThat(root.getChild("rm")).isNotNull();
+            assertThat(root.getChild("owner")).isNull();
+            assertThat(root.getChild("member")).isNull();
+        }
+    }
+
+    @Test
+    void ownerAndMemberAliasesAcceptWorldGuardDomainArguments() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir, 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+
+        commands.register(dispatcher);
+
+        CommandNode<CommandSourceStack> rg = root(dispatcher, "rg");
+        for (String alias : List.of(
+            "addowner",
+            "ao",
+            "removeowner",
+            "remowner",
+            "ro",
+            "addmember",
+            "addmem",
+            "am",
+            "removemember",
+            "removemem",
+            "remmember",
+            "remmem",
+            "rm"
+        )) {
+            assertThat(rg.getChild(alias).getChild("region").getChild("domain"))
+                .as(alias)
+                .isNotNull();
         }
     }
 

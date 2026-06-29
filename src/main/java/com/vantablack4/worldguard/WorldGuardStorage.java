@@ -224,6 +224,34 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> addOwnerGroup(String rawId, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withOwnerGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> addOwnerGroup(String rawId, String world, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withOwnerGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> removeOwnerGroup(String rawId, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutOwnerGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> removeOwnerGroup(String rawId, String world, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutOwnerGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
     public synchronized Optional<WorldGuardRegion> addMember(String rawId, UUID playerUuid) {
         Optional<WorldGuardRegion> existing = find(rawId);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withMember(playerUuid));
@@ -248,6 +276,34 @@ public final class WorldGuardStorage {
     public synchronized Optional<WorldGuardRegion> removeMember(String rawId, String world, UUID playerUuid) {
         Optional<WorldGuardRegion> existing = find(rawId, world);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutMember(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> addMemberGroup(String rawId, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withMemberGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> addMemberGroup(String rawId, String world, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withMemberGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> removeMemberGroup(String rawId, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutMemberGroup(group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> removeMemberGroup(String rawId, String world, String group) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutMemberGroup(group));
         updated.ifPresent(this::save);
         return updated;
     }
@@ -510,9 +566,9 @@ public final class WorldGuardStorage {
         }
         Set<String> values = new HashSet<>();
         for (String part : value.split(",")) {
-            String trimmed = stripDomainPrefix(part.trim(), "g:");
+            String trimmed = com.vantablack4.worldguard.model.RegionDomain.normalizeGroup(part.trim());
             if (!trimmed.isBlank()) {
-                values.add(trimmed.toLowerCase(Locale.ROOT));
+                values.add(trimmed);
             }
         }
         return values;

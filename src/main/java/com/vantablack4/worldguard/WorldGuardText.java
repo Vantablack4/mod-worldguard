@@ -35,12 +35,25 @@ final class WorldGuardText {
         return "A new region has been made named '" + id + "'.";
     }
 
+    static String regionAlreadyExists(String id) {
+        return "A region with that name already exists. Please choose another name."
+            + " To change the shape, use /region redefine " + id + ".";
+    }
+
     static String updatedRegionArea(String id) {
         return "Region '" + id + "' has been updated with a new area.";
     }
 
     static String removedRegions(String ids) {
         return "Successfully removed " + ids + ".";
+    }
+
+    static String teleportedToRegion(String id) {
+        return "Teleported you to the '" + id + "' region.";
+    }
+
+    static String worldNotLoaded(String world) {
+        return "World '" + world + "' is not loaded.";
     }
 
     static String unknownFlag(String flag) {

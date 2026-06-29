@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.MobCategory;
 
 import com.vantablack4.worldguard.FlagState;
 import com.vantablack4.worldguard.WorldGuardFlag;
@@ -17,6 +18,28 @@ import com.vantablack4.worldguard.WorldGuardRegion;
 final class WorldGuardSessionRulesTests {
     private static final String WORLD = "minecraft:overworld";
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000001");
+
+    @Test
+    void playerDamageAgainstAnimalsChecksAnimalAndEntityFlags() {
+        assertThat(WorldGuardSessionRules.nonPlayerDamageFlags(MobCategory.CREATURE, true, false))
+            .containsExactly(WorldGuardFlag.DAMAGE_ANIMALS, WorldGuardFlag.ATTACK_ENTITY);
+        assertThat(WorldGuardSessionRules.nonPlayerDamageFlags(MobCategory.WATER_CREATURE, true, false))
+            .containsExactly(WorldGuardFlag.DAMAGE_ANIMALS, WorldGuardFlag.ATTACK_ENTITY);
+    }
+
+    @Test
+    void playerDamageAgainstMonstersChecksGenericEntityAttackFlag() {
+        assertThat(WorldGuardSessionRules.nonPlayerDamageFlags(MobCategory.MONSTER, true, false))
+            .containsExactly(WorldGuardFlag.ATTACK_ENTITY);
+    }
+
+    @Test
+    void nonPlayerDamageUsesMobDamageFlag() {
+        assertThat(WorldGuardSessionRules.nonPlayerDamageFlags(MobCategory.CREATURE, false, true))
+            .containsExactly(WorldGuardFlag.MOB_DAMAGE);
+        assertThat(WorldGuardSessionRules.nonPlayerDamageFlags(MobCategory.CREATURE, false, false))
+            .isEmpty();
+    }
 
     @Test
     void entryDenyBlocksCrossingIntoRegion() {

@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.MobCategory;
 
 import com.vantablack4.worldguard.FlagState;
 import com.vantablack4.worldguard.ProtectionDecision;
@@ -47,6 +48,18 @@ public final class WorldGuardSessionRules {
         UUID playerUuid,
         boolean bypass
     ) {
+        return movementDecision(regions, world, from, to, playerUuid, List.of(), bypass);
+    }
+
+    public static WorldGuardMovementDecision movementDecision(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        BlockPos from,
+        BlockPos to,
+        UUID playerUuid,
+        Collection<String> playerGroups,
+        boolean bypass
+    ) {
         if (bypass || world == null || from == null || to == null || from.equals(to)) {
             return WorldGuardMovementDecision.allow();
         }
@@ -64,6 +77,7 @@ public final class WorldGuardSessionRules {
                 world,
                 from,
                 playerUuid,
+                playerGroups,
                 false,
                 WorldGuardFlag.EXIT
             );
@@ -78,6 +92,7 @@ public final class WorldGuardSessionRules {
                 world,
                 to,
                 playerUuid,
+                playerGroups,
                 false,
                 WorldGuardFlag.ENTRY
             );
@@ -94,6 +109,18 @@ public final class WorldGuardSessionRules {
         String world,
         BlockPos pos,
         UUID playerUuid,
+        boolean bypass,
+        WorldGuardFlag... flags
+    ) {
+        return checkAny(regions, world, pos, playerUuid, List.of(), bypass, flags);
+    }
+
+    public static ProtectionDecision checkAny(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        BlockPos pos,
+        UUID playerUuid,
+        Collection<String> playerGroups,
         boolean bypass,
         WorldGuardFlag... flags
     ) {
@@ -114,6 +141,7 @@ public final class WorldGuardSessionRules {
                 pos.getZ(),
                 flag,
                 playerUuid,
+                playerGroups,
                 false
             );
             if (!decision.allowed()) {
@@ -131,6 +159,18 @@ public final class WorldGuardSessionRules {
         boolean bypass,
         WorldGuardFlag flag
     ) {
+        return enabledRegion(regions, world, pos, playerUuid, List.of(), bypass, flag);
+    }
+
+    public static Optional<String> enabledRegion(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        BlockPos pos,
+        UUID playerUuid,
+        Collection<String> playerGroups,
+        boolean bypass,
+        WorldGuardFlag flag
+    ) {
         if (bypass || world == null || pos == null || flag == null) {
             return Optional.empty();
         }
@@ -142,9 +182,29 @@ public final class WorldGuardSessionRules {
             pos.getY(),
             pos.getZ(),
             flag,
-            playerUuid
+            playerUuid,
+            playerGroups
         );
         return evaluation.state() == FlagState.ALLOW ? Optional.of(evaluation.regionId()) : Optional.empty();
+    }
+
+    public static List<WorldGuardFlag> nonPlayerDamageFlags(
+        MobCategory victimCategory,
+        boolean playerAttacker,
+        boolean nonPlayerAttacker
+    ) {
+        if (playerAttacker) {
+            List<WorldGuardFlag> flags = new ArrayList<>();
+            if (protectedAnimalCategory(victimCategory)) {
+                flags.add(WorldGuardFlag.DAMAGE_ANIMALS);
+            }
+            flags.add(WorldGuardFlag.ATTACK_ENTITY);
+            return List.copyOf(flags);
+        }
+        if (nonPlayerAttacker) {
+            return List.of(WorldGuardFlag.MOB_DAMAGE);
+        }
+        return List.of();
     }
 
     public static List<WorldGuardSessionMessage> messagesForTransition(
@@ -209,6 +269,15 @@ public final class WorldGuardSessionRules {
 
     private static boolean changedRegions(WorldGuardSessionSnapshot previous, WorldGuardSessionSnapshot current) {
         return !Set.copyOf(previous.regionIds()).equals(Set.copyOf(current.regionIds()));
+    }
+
+    private static boolean protectedAnimalCategory(MobCategory category) {
+        return category == MobCategory.CREATURE
+            || category == MobCategory.AMBIENT
+            || category == MobCategory.AXOLOTLS
+            || category == MobCategory.UNDERGROUND_WATER_CREATURE
+            || category == MobCategory.WATER_CREATURE
+            || category == MobCategory.WATER_AMBIENT;
     }
 
     private static boolean enteredRegion(WorldGuardSessionSnapshot previous, WorldGuardSessionSnapshot current) {

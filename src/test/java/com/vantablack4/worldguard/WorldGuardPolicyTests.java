@@ -372,4 +372,124 @@ final class WorldGuardPolicyTests {
 
         assertThat(decision.allowed()).isTrue();
     }
+
+    @Test
+    void ownerGroupsInheritedFromParentsBypassMemberDeny() {
+        UUID player = UUID.randomUUID();
+        UUID outsider = UUID.randomUUID();
+        WorldGuardRegion parent = new WorldGuardRegion(
+            "town",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            20,
+            20,
+            20,
+            2,
+            "",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of("mayor"),
+            Set.of(),
+            Map.of(WorldGuardFlag.INTERACT, FlagState.DENY)
+        );
+        WorldGuardRegion child = new WorldGuardRegion(
+            "plot",
+            "minecraft:overworld",
+            1,
+            1,
+            1,
+            3,
+            3,
+            3,
+            2,
+            "town",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
+
+        ProtectionDecision groupOwnerDecision = WorldGuardPolicy.evaluate(
+            List.of(parent, child),
+            "minecraft:overworld",
+            2,
+            2,
+            2,
+            WorldGuardFlag.INTERACT,
+            player,
+            Set.of("Mayor"),
+            false
+        );
+        ProtectionDecision outsiderDecision = WorldGuardPolicy.evaluate(
+            List.of(parent, child),
+            "minecraft:overworld",
+            2,
+            2,
+            2,
+            WorldGuardFlag.INTERACT,
+            outsider,
+            Set.of(),
+            false
+        );
+
+        assertThat(groupOwnerDecision.allowed()).isTrue();
+        assertThat(outsiderDecision.allowed()).isFalse();
+        assertThat(outsiderDecision.regionId()).isEqualTo("plot");
+    }
+
+    @Test
+    void globalRegionMemberGroupsMakeMembershipDefaultsApplyEverywhere() {
+        UUID member = UUID.randomUUID();
+        UUID outsider = UUID.randomUUID();
+        WorldGuardRegion global = new WorldGuardRegion(
+            WorldGuardRegion.GLOBAL_REGION_ID,
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            "",
+            com.vantablack4.worldguard.model.RegionType.GLOBAL,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of("resident"),
+            Map.of()
+        );
+
+        ProtectionDecision memberDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            member,
+            Set.of("Resident"),
+            false
+        );
+        ProtectionDecision outsiderDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.BUILD,
+            outsider,
+            Set.of(),
+            false
+        );
+
+        assertThat(memberDecision.allowed()).isTrue();
+        assertThat(outsiderDecision.allowed()).isFalse();
+        assertThat(outsiderDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
 }
