@@ -38,6 +38,11 @@ final class WorldGuardTextTests {
             .isEqualTo("Region 'spawn' has been updated with a new area.");
         assertThat(WorldGuardText.removedRegions("spawn"))
             .isEqualTo("Successfully removed spawn.");
+        assertThat(WorldGuardText.removeChildFlagsConflict())
+            .isEqualTo("You cannot use both -u (unset parent) and -f (remove children) together.");
+        assertThat(WorldGuardText.removeHasChildren("spawn"))
+            .isEqualTo("The region 'spawn' has child regions. Use -f to force removal of children "
+                + "or -u to unset the parent value of these children.");
         assertThat(WorldGuardText.teleportedToRegion("spawn"))
             .isEqualTo("Teleported you to the region 'spawn'.");
         assertThat(WorldGuardText.noTeleportPoint())

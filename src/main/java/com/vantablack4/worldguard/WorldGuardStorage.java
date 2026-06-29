@@ -18,8 +18,10 @@ import java.nio.file.StandardCopyOption;
 import java.text.Normalizer;
 import java.text.Normalizer.Form;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,6 +42,12 @@ public final class WorldGuardStorage {
 
     private final Path regionsFile;
     private final Properties properties;
+
+    public enum DeleteMode {
+        REFUSE_CHILDREN,
+        UNSET_PARENT_IN_CHILDREN,
+        REMOVE_CHILDREN
+    }
 
     private WorldGuardStorage(Path configDirectory, Properties properties) {
         this.regionsFile = configDirectory.resolve("regions.properties");
@@ -144,14 +152,62 @@ public final class WorldGuardStorage {
     }
 
     public synchronized boolean delete(String rawId, String world) {
+        return delete(rawId, world, DeleteMode.UNSET_PARENT_IN_CHILDREN);
+    }
+
+    public synchronized boolean delete(String rawId, String world, DeleteMode mode) {
         String id = normalizeId(rawId);
         String normalizedWorld = normalizeWorld(world);
+        if (mode == DeleteMode.REFUSE_CHILDREN && !childRegions(id, normalizedWorld).isEmpty()) {
+            return false;
+        }
         boolean removed = removeRegion(id, normalizedWorld);
         if (removed) {
-            clearDanglingParents(id, normalizedWorld);
+            if (mode == DeleteMode.REMOVE_CHILDREN) {
+                for (WorldGuardRegion child : descendantRegions(id, normalizedWorld)) {
+                    removeRegion(child.id(), normalizedWorld);
+                }
+            } else {
+                clearDanglingParents(id, normalizedWorld);
+            }
             saveProperties();
         }
         return removed;
+    }
+
+    public synchronized List<WorldGuardRegion> childRegions(String rawId, String world) {
+        String id = normalizeId(rawId);
+        String normalizedWorld = normalizeWorld(world);
+        if (id.isBlank()) {
+            return List.of();
+        }
+        return RegionQueryEngine.sort(regions(normalizedWorld).stream()
+            .filter(region -> region.parentId().equals(id))
+            .toList());
+    }
+
+    public synchronized List<WorldGuardRegion> descendantRegions(String rawId, String world) {
+        String id = normalizeId(rawId);
+        String normalizedWorld = normalizeWorld(world);
+        if (id.isBlank()) {
+            return List.of();
+        }
+
+        List<WorldGuardRegion> scoped = regions(normalizedWorld);
+        List<WorldGuardRegion> descendants = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        Deque<String> pending = new ArrayDeque<>();
+        pending.add(id);
+        while (!pending.isEmpty()) {
+            String parentId = pending.removeFirst();
+            for (WorldGuardRegion candidate : scoped) {
+                if (candidate.parentId().equals(parentId) && seen.add(candidate.id())) {
+                    descendants.add(candidate);
+                    pending.add(candidate.id());
+                }
+            }
+        }
+        return List.copyOf(descendants);
     }
 
     public synchronized Optional<WorldGuardRegion> setFlag(String rawId, WorldGuardFlag flag, FlagState state) {

@@ -97,6 +97,13 @@ public final class WorldGuardCommands {
     private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
         new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
+    private enum RemoveMode {
+        DEFAULT,
+        FORCE,
+        UNSET_PARENT,
+        CONFLICT
+    }
+
     private final WorldGuardConfig config;
     private final WorldGuardStorage storage;
     private final WorldEditSelectionSource worldEditSelectionSource;
@@ -200,22 +207,10 @@ public final class WorldGuardCommands {
                 .requires(source -> mayRegion(source, "redefine"))
                 .then(redefineArguments())
                 .then(worldFlag(redefineArguments())))
-            .then(Commands.literal("delete")
-                .requires(source -> mayRegion(source, "remove"))
-                .then(regionArgument().executes(this::delete))
-                .then(worldFlag(regionArgument().executes(this::delete))))
-            .then(Commands.literal("del")
-                .requires(source -> mayRegion(source, "remove"))
-                .then(regionArgument().executes(this::delete))
-                .then(worldFlag(regionArgument().executes(this::delete))))
-            .then(Commands.literal("remove")
-                .requires(source -> mayRegion(source, "remove"))
-                .then(regionArgument().executes(this::delete))
-                .then(worldFlag(regionArgument().executes(this::delete))))
-            .then(Commands.literal("rem")
-                .requires(source -> mayRegion(source, "remove"))
-                .then(regionArgument().executes(this::delete))
-                .then(worldFlag(regionArgument().executes(this::delete))))
+            .then(removeCommand("delete"))
+            .then(removeCommand("del"))
+            .then(removeCommand("remove"))
+            .then(removeCommand("rem"))
             .then(teleportCommand("teleport"))
             .then(teleportCommand("tp"))
             .then(Commands.literal("flags")
@@ -673,11 +668,16 @@ public final class WorldGuardCommands {
         return 1;
     }
 
-    private int delete(CommandContext<CommandSourceStack> context) {
+    private int delete(CommandContext<CommandSourceStack> context, RemoveMode mode) {
         String id = checkRegionId(context, getString(context, ID_ARGUMENT), true);
         if (id.isBlank()) {
             return 0;
         }
+        if (mode == RemoveMode.CONFLICT) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.removeChildFlagsConflict()));
+            return 0;
+        }
+
         String world = commandWorld(context);
         if (id.equals(WorldGuardRegion.GLOBAL_REGION_ID)) {
             storage.findOrCreateGlobal(world);
@@ -685,8 +685,28 @@ public final class WorldGuardCommands {
             noRegion(context, id);
             return 0;
         }
-        if (storage.delete(id, world)) {
-            context.getSource().sendSystemMessage(success(WorldGuardText.removedRegions(id)));
+
+        List<WorldGuardRegion> removedChildren = mode == RemoveMode.FORCE
+            ? storage.descendantRegions(id, world)
+            : storage.childRegions(id, world);
+        if (mode == RemoveMode.DEFAULT && !removedChildren.isEmpty()) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.removeHasChildren(id)));
+            return 0;
+        }
+
+        WorldGuardStorage.DeleteMode deleteMode = switch (mode) {
+            case FORCE -> WorldGuardStorage.DeleteMode.REMOVE_CHILDREN;
+            case UNSET_PARENT -> WorldGuardStorage.DeleteMode.UNSET_PARENT_IN_CHILDREN;
+            case DEFAULT -> WorldGuardStorage.DeleteMode.REFUSE_CHILDREN;
+            case CONFLICT -> throw new IllegalStateException("conflicting remove flags should have returned");
+        };
+        if (storage.delete(id, world, deleteMode)) {
+            List<String> removed = new ArrayList<>();
+            removed.add(id);
+            if (mode == RemoveMode.FORCE) {
+                removed.addAll(removedChildren.stream().map(WorldGuardRegion::id).toList());
+            }
+            context.getSource().sendSystemMessage(success(WorldGuardText.removedRegions(String.join(", ", removed))));
             return 1;
         }
         noRegion(context, id);
@@ -1265,6 +1285,42 @@ public final class WorldGuardCommands {
             .then(Commands.literal("-c")
                 .then(regionArgument().executes(context -> teleport(context, TeleportMode.CENTER)))
                 .then(worldFlag(regionArgument().executes(context -> teleport(context, TeleportMode.CENTER)))));
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> removeCommand(String name) {
+        return Commands.literal(name)
+            .requires(source -> mayRegion(source, "remove"))
+            .then(removeRegionArgument(RemoveMode.DEFAULT))
+            .then(removeModeFlag("-f", RemoveMode.FORCE, "-u"))
+            .then(removeModeFlag("-u", RemoveMode.UNSET_PARENT, "-f"))
+            .then(worldRemoveFlag());
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> removeRegionArgument(RemoveMode mode) {
+        return regionArgument().executes(context -> delete(context, mode));
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> removeModeFlag(
+        String flag,
+        RemoveMode mode,
+        String conflictingFlag
+    ) {
+        return Commands.literal(flag)
+            .then(removeRegionArgument(mode))
+            .then(worldFlag(removeRegionArgument(mode)))
+            .then(Commands.literal(conflictingFlag)
+                .then(removeRegionArgument(RemoveMode.CONFLICT))
+                .then(worldFlag(removeRegionArgument(RemoveMode.CONFLICT))));
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> worldRemoveFlag() {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
+            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+            .suggests(this::suggestWorlds);
+        world.then(removeRegionArgument(RemoveMode.DEFAULT));
+        world.then(removeModeFlag("-f", RemoveMode.FORCE, "-u"));
+        world.then(removeModeFlag("-u", RemoveMode.UNSET_PARENT, "-f"));
+        return Commands.literal("-w").then(world);
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> worldFlag(ArgumentBuilder<CommandSourceStack, ?> child) {

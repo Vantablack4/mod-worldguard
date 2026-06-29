@@ -118,8 +118,27 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("f").getChild("-w").getChild("world").getChild("region").getChild("flag"))
                 .isNotNull();
             for (String alias : List.of("delete", "del", "remove", "rem")) {
-                assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region"))
+                CommandNode<CommandSourceStack> remove = root.getChild(alias);
+                assertThat(remove.getChild("-w").getChild("world").getChild("region"))
                     .as(alias + " -w")
+                    .isNotNull();
+                assertThat(remove.getChild("-f").getChild("region"))
+                    .as(alias + " -f")
+                    .isNotNull();
+                assertThat(remove.getChild("-u").getChild("region"))
+                    .as(alias + " -u")
+                    .isNotNull();
+                assertThat(remove.getChild("-f").getChild("-u").getChild("region"))
+                    .as(alias + " -f -u")
+                    .isNotNull();
+                assertThat(remove.getChild("-u").getChild("-f").getChild("region"))
+                    .as(alias + " -u -f")
+                    .isNotNull();
+                assertThat(remove.getChild("-w").getChild("world").getChild("-f").getChild("region"))
+                    .as(alias + " -w -f")
+                    .isNotNull();
+                assertThat(remove.getChild("-f").getChild("-w").getChild("world").getChild("region"))
+                    .as(alias + " -f -w")
                     .isNotNull();
             }
             for (String alias : List.of("select", "sel", "s", "redefine", "update", "move")) {

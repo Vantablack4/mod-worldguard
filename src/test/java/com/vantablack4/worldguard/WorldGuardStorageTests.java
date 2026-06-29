@@ -243,6 +243,61 @@ final class WorldGuardStorageTests {
     }
 
     @Test
+    void deleteCanRefuseRegionsWithChildren() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(region("parent"));
+        storage.save(region("child").withParent("parent"));
+
+        assertThat(storage.childRegions("parent", "minecraft:overworld"))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("child");
+        assertThat(storage.delete("parent", "minecraft:overworld", WorldGuardStorage.DeleteMode.REFUSE_CHILDREN))
+            .isFalse();
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+        assertThat(reloaded.find("parent", "minecraft:overworld")).isPresent();
+        assertThat(reloaded.find("child", "minecraft:overworld").orElseThrow().parentId())
+            .isEqualTo("parent");
+    }
+
+    @Test
+    void deleteCanUnsetParentInChildren() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(region("parent"));
+        storage.save(region("child").withParent("parent"));
+
+        assertThat(storage.delete(
+            "parent",
+            "minecraft:overworld",
+            WorldGuardStorage.DeleteMode.UNSET_PARENT_IN_CHILDREN
+        )).isTrue();
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+        assertThat(reloaded.find("parent", "minecraft:overworld")).isEmpty();
+        assertThat(reloaded.find("child", "minecraft:overworld").orElseThrow().parentId())
+            .isBlank();
+    }
+
+    @Test
+    void deleteCanRemoveDescendantChildren() {
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(region("parent"));
+        storage.save(region("child").withParent("parent"));
+        storage.save(region("grandchild").withParent("child"));
+
+        assertThat(storage.descendantRegions("parent", "minecraft:overworld"))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("child", "grandchild");
+        assertThat(storage.delete("parent", "minecraft:overworld", WorldGuardStorage.DeleteMode.REMOVE_CHILDREN))
+            .isTrue();
+
+        WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
+        assertThat(reloaded.find("parent", "minecraft:overworld")).isEmpty();
+        assertThat(reloaded.find("child", "minecraft:overworld")).isEmpty();
+        assertThat(reloaded.find("grandchild", "minecraft:overworld")).isEmpty();
+    }
+
+    @Test
     void skipsMalformedDomainUuidsWithoutDroppingRegion() throws IOException {
         Files.createDirectories(tempDir);
         Files.writeString(tempDir.resolve("regions.properties"), """
@@ -309,5 +364,19 @@ final class WorldGuardStorageTests {
         assertThat(stored).contains(".flag.teleport=minecraft\\:overworld,10.5,64.0,-2.25,90.0,12.5");
         assertThat(stored).contains(".flag.entry-group=members");
         assertThat(stored).contains(".flag.teleport-group=owners");
+    }
+
+    private static WorldGuardRegion region(String id) {
+        return WorldGuardRegion.defaultProtected(
+            id,
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0
+        );
     }
 }

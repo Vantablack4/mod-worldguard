@@ -68,6 +68,15 @@ final class WorldGuardText {
         return "Successfully removed " + ids + ".";
     }
 
+    static String removeChildFlagsConflict() {
+        return "You cannot use both -u (unset parent) and -f (remove children) together.";
+    }
+
+    static String removeHasChildren(String id) {
+        return "The region '" + id + "' has child regions. Use -f to force removal of children "
+            + "or -u to unset the parent value of these children.";
+    }
+
     static String teleportedToRegion(String id) {
         return "Teleported you to the region '" + id + "'.";
     }
