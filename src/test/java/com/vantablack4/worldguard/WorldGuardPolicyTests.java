@@ -167,6 +167,45 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void buildOverrideKeepsSpecificDenyStrongerThanLaterSpecificAllow() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(),
+            Map.of(
+                WorldGuardFlag.BUILD, FlagState.ALLOW,
+                WorldGuardFlag.LIGHTER, FlagState.ALLOW,
+                WorldGuardFlag.BLOCK_PLACE, FlagState.DENY
+            )
+        );
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluateBuild(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            player,
+            List.of(),
+            false,
+            WorldGuardFlag.BUILD,
+            WorldGuardFlag.LIGHTER,
+            WorldGuardFlag.BLOCK_PLACE
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.flag()).isEqualTo(WorldGuardFlag.BLOCK_PLACE);
+    }
+
+    @Test
     void membersBypassDenyInTheirRegion() {
         UUID player = UUID.randomUUID();
         WorldGuardRegion region = new WorldGuardRegion(

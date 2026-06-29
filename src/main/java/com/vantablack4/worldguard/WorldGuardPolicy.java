@@ -88,6 +88,7 @@ public final class WorldGuardPolicy {
         ProtectionDecision buildDenied = build.state() == FlagState.DENY
             ? ProtectionDecision.deny(build.regionId(), WorldGuardFlag.BUILD)
             : null;
+        ProtectionDecision specificAllow = null;
 
         if (flags != null) {
             for (WorldGuardFlag flag : flags) {
@@ -108,11 +109,14 @@ public final class WorldGuardPolicy {
                     return ProtectionDecision.deny(evaluation.regionId(), flag);
                 }
                 if (evaluation.state() == FlagState.ALLOW) {
-                    return ProtectionDecision.allow();
+                    specificAllow = ProtectionDecision.allow();
                 }
             }
         }
 
+        if (specificAllow != null) {
+            return specificAllow;
+        }
         if (build.state() == FlagState.ALLOW) {
             return ProtectionDecision.allow();
         }
