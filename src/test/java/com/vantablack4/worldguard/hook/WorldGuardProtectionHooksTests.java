@@ -21,6 +21,7 @@ import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.material.Fluids;
@@ -292,6 +293,27 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void farmlandMutationFlagsSeparateDryingFromHydration() {
+        var hydrated = Blocks.FARMLAND.defaultBlockState()
+            .setValue(FarmlandBlock.MOISTURE, FarmlandBlock.MAX_MOISTURE);
+        var drying = Blocks.FARMLAND.defaultBlockState()
+            .setValue(FarmlandBlock.MOISTURE, FarmlandBlock.MAX_MOISTURE - 1);
+
+        assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(hydrated, drying))
+            .containsExactly(WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
+        assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(drying, hydrated))
+            .containsExactly(WorldGuardFlag.MOISTURE_CHANGE);
+        assertThat(WorldGuardProtectionHooks.farmlandMutationFlags(hydrated, Blocks.DIRT.defaultBlockState()))
+            .containsExactly(WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
+    }
+
+    @Test
+    void generatedMushroomBlocksUseMushroomGrowthAndPlacementFlagsAtTargets() {
+        assertThat(WorldGuardProtectionHooks.generatedMushroomBlockFlags())
+            .containsExactly(WorldGuardFlag.MUSHROOMS, WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE);
+    }
+
+    @Test
     void spreadingSnowyBlocksMapToGrassOrMyceliumFlags() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
@@ -460,6 +482,28 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void globalMushroomGrowthOrPlacementDenyBlocksGeneratedMushroomTargets() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion mushroomDeny = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.MUSHROOMS, FlagState.DENY);
+        WorldGuardRegion placeDeny = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.BLOCK_PLACE, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(mushroomDeny),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.generatedMushroomBlockFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(placeDeny),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.generatedMushroomBlockFlags()
+        )).isTrue();
+    }
+
+    @Test
     void dragonAndWitherBlockDamageFlagsDenyBossBlockMutation() {
         WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
             .withFlag(WorldGuardFlag.ENDERDRAGON_BLOCK_DAMAGE, FlagState.DENY)
@@ -516,11 +560,25 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void globalRockGrowthDenyBlocksPointedDripstoneTargets() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.ROCK_GROWTH, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardFlag.ROCK_GROWTH
+        )).isTrue();
+    }
+
+    @Test
     void mixinConfigurationRegistersEnvironmentProtectionHooks() throws Exception {
         String mixins = Files.readString(Path.of("src/main/resources/mod_worldguard.mixins.json"));
 
         assertThat(mixins)
             .contains(
+                "AbstractHugeMushroomFeatureMixin",
                 "BuddingAmethystBlockMixin",
                 "CaveVinesBerryGrowthMixin",
                 "FarmlandBlockMixin",
@@ -528,6 +586,8 @@ final class WorldGuardProtectionHooksTests {
                 "ExperienceOrbMixin",
                 "LavaFluidMixin",
                 "MangrovePropaguleBlockMixin",
+                "MushroomBlockMixin",
+                "PointedDripstoneBlockMixin",
                 "ReplaceDiskMixin",
                 "SculkChargeCursorMixin",
                 "SnowGolemMixin",

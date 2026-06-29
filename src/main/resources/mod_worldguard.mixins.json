@@ -3,6 +3,7 @@
   "package": "com.vantablack4.worldguard.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "AbstractHugeMushroomFeatureMixin",
     "ArmorStandItemMixin",
     "BasePressurePlateBlockMixin",
     "BoatItemMixin",

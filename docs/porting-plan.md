@@ -74,8 +74,6 @@ Full WorldGuard behavior is mostly event coverage and cache design:
   dispenser/dropper synthetic item/block actions, lectern book-take protection,
   entity-triggered dripleaf tilt, full non-damaging potion-effect paths, and
   mount/dismount edge cases beyond direct ride use.
-- Finish remaining target-position region-border parity for pointed-dripstone
-  growth and generated huge mushroom blocks.
 - Continue command output parity for Bukkit WorldGuard's richer text/clickable
   pagination and exact formatting.
 - Add migration tooling if Vantablack later chooses to reuse LGPL

@@ -34,11 +34,12 @@ Included in the Fabric port:
   teleport use, chat send/receive filtering, sleep, PvP, fall damage,
   natural health regeneration, natural hunger drain, invincibility, item drop,
   item pickup, vehicle and entity placement/destruction, item frame rotation,
-  crop and block trampling, pressure plates,
+  crop and block trampling, direct farmland-to-dirt conversion, pressure plates,
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
   sapling/tree feature growth, leaf decay,
   mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations,
   amethyst bud growth, hanging mangrove propagule growth, cave-vine crop/vine
+  growth, generated huge mushroom target blocks, pointed-dripstone target
   growth, lava-created fire, frosted-ice formation, snowman snow trails, and
   experience orb drops.
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
@@ -72,8 +73,6 @@ Not included yet:
 - Dispenser/dropper synthetic action simulation, lectern book-take protection,
   entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
   and mount/dismount mixin parity beyond the current direct-use ride checks.
-- Remaining target-position edge cases for pointed-dripstone spread and
-  generated huge mushroom blocks at region borders.
 - Full rich-text/clickable command output parity with Bukkit WorldGuard.
 
 ## Commands

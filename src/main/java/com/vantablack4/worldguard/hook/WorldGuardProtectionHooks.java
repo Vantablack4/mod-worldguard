@@ -36,6 +36,7 @@ import net.minecraft.world.level.block.AnvilBlock;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.HopperBlock;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -373,6 +374,13 @@ public final class WorldGuardProtectionHooks {
         return deniesAny(level, pos, flags);
     }
 
+    public static boolean deniesFarmlandTurnToDirt(Level level, Entity entity, BlockPos pos) {
+        if (entity == null) {
+            return deniesFarmlandDry(level, pos);
+        }
+        return deniesTrample(level, entity, pos);
+    }
+
     public static boolean deniesRedstoneTrigger(Level level, Entity entity, BlockPos pos) {
         if (!shouldCheck(level) || pos == null) {
             return false;
@@ -469,6 +477,13 @@ public final class WorldGuardProtectionHooks {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE);
     }
 
+    public static boolean deniesFarmlandMutation(LevelAccessor level, BlockPos pos, BlockState nextState) {
+        if (!(level instanceof Level concreteLevel) || pos == null) {
+            return false;
+        }
+        return deniesAny(concreteLevel, pos, farmlandMutationFlags(concreteLevel.getBlockState(pos), nextState));
+    }
+
     public static boolean deniesCropGrowth(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.CROP_GROWTH);
     }
@@ -483,6 +498,10 @@ public final class WorldGuardProtectionHooks {
 
     public static boolean deniesMushroomGrowth(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.MUSHROOMS);
+    }
+
+    public static boolean deniesGeneratedMushroomBlock(LevelAccessor level, BlockPos pos) {
+        return deniesNaturalMutation(level, pos, generatedMushroomBlockFlags());
     }
 
     public static boolean deniesVineGrowth(LevelAccessor level, BlockPos pos) {
@@ -861,6 +880,30 @@ public final class WorldGuardProtectionHooks {
 
     static WorldGuardFlag[] generatedTreeBlockFlags() {
         return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE };
+    }
+
+    static WorldGuardFlag[] generatedMushroomBlockFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.MUSHROOMS, WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE };
+    }
+
+    static WorldGuardFlag[] farmlandMutationFlags(BlockState currentState, BlockState nextState) {
+        if (currentState != null && currentState.is(Blocks.FARMLAND)) {
+            if (nextState != null && nextState.is(Blocks.FARMLAND)
+                && currentState.hasProperty(FarmlandBlock.MOISTURE)
+                && nextState.hasProperty(FarmlandBlock.MOISTURE)) {
+                int currentMoisture = currentState.getValue(FarmlandBlock.MOISTURE);
+                int nextMoisture = nextState.getValue(FarmlandBlock.MOISTURE);
+                if (nextMoisture < currentMoisture) {
+                    return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE };
+                }
+                if (nextMoisture > currentMoisture) {
+                    return new WorldGuardFlag[] { WorldGuardFlag.MOISTURE_CHANGE };
+                }
+            } else if (nextState == null || !nextState.is(Blocks.FARMLAND)) {
+                return new WorldGuardFlag[] { WorldGuardFlag.SOIL_DRY, WorldGuardFlag.MOISTURE_CHANGE };
+            }
+        }
+        return new WorldGuardFlag[] { WorldGuardFlag.MOISTURE_CHANGE };
     }
 
     static WorldGuardFlag spreadingSnowyFlag(BlockState state) {
