@@ -48,6 +48,7 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.phys.Vec3;
 
 import com.vantablack4.worldguard.ProtectionDecision;
 import com.vantablack4.worldguard.WorldGuardFlag;
@@ -81,6 +82,10 @@ public final class WorldGuardProtectionHooks {
 
     public static boolean deniesFireMutation(Level level, BlockPos pos) {
         return deniesAny(level, pos, WorldGuardFlag.FIRE_SPREAD);
+    }
+
+    public static boolean deniesLavaFire(Level level, BlockPos pos) {
+        return deniesAny(level, pos, lavaFireFlags());
     }
 
     public static boolean deniesFluidFlow(LevelAccessor level, BlockPos pos, FluidState fluidState) {
@@ -436,6 +441,10 @@ public final class WorldGuardProtectionHooks {
         return deniesAny(level, pos, WorldGuardFlag.SNOW_FALL);
     }
 
+    public static boolean deniesSnowmanTrail(Level level, BlockPos pos) {
+        return deniesAny(level, pos, snowmanTrailFlags());
+    }
+
     public static boolean deniesSnowMelt(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.SNOW_MELT);
     }
@@ -446,6 +455,14 @@ public final class WorldGuardProtectionHooks {
 
     public static boolean deniesFrostedIceMelt(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.FROSTED_ICE_MELT);
+    }
+
+    public static boolean deniesFrostedIceForm(Level level, BlockPos pos, BlockState state) {
+        return state != null && state.is(Blocks.FROSTED_ICE) && deniesAny(level, pos, frostedIceFormFlags());
+    }
+
+    public static boolean deniesExperienceDrop(Level level, Vec3 pos) {
+        return pos != null && deniesAny(level, BlockPos.containing(pos), experienceDropFlags());
     }
 
     public static boolean deniesFarmlandDry(LevelAccessor level, BlockPos pos) {
@@ -805,6 +822,22 @@ public final class WorldGuardProtectionHooks {
             return new WorldGuardFlag[] { WorldGuardFlag.BREEZE_WIND_CHARGE };
         }
         return new WorldGuardFlag[] { WorldGuardFlag.WIND_CHARGE_BURST };
+    }
+
+    static WorldGuardFlag[] snowmanTrailFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.SNOWMAN_TRAILS, WorldGuardFlag.MOB_GRIEF };
+    }
+
+    static WorldGuardFlag[] experienceDropFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.EXP_DROPS };
+    }
+
+    static WorldGuardFlag[] frostedIceFormFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.FROSTED_ICE_FORM };
+    }
+
+    static WorldGuardFlag[] lavaFireFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.LAVA_FIRE };
     }
 
     static WorldGuardFlag[] entityPlaceFlags() {

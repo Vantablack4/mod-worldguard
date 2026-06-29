@@ -37,7 +37,9 @@ Included in the Fabric port:
   crop and block trampling, pressure plates,
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
   sapling/tree feature growth, leaf decay,
-  mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations.
+  mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations,
+  lava-created fire, frosted-ice formation, snowman snow trails, and experience
+  orb drops.
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
   `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
   `game-mode`, and heal/feed flags.

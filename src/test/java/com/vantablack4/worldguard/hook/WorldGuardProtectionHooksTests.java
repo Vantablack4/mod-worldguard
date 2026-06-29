@@ -245,6 +245,18 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void remainingEnvironmentalHelpersMapToSpecificUpstreamFlags() {
+        assertThat(WorldGuardProtectionHooks.snowmanTrailFlags())
+            .containsExactly(WorldGuardFlag.SNOWMAN_TRAILS, WorldGuardFlag.MOB_GRIEF);
+        assertThat(WorldGuardProtectionHooks.experienceDropFlags())
+            .containsExactly(WorldGuardFlag.EXP_DROPS);
+        assertThat(WorldGuardProtectionHooks.frostedIceFormFlags())
+            .containsExactly(WorldGuardFlag.FROSTED_ICE_FORM);
+        assertThat(WorldGuardProtectionHooks.lavaFireFlags())
+            .containsExactly(WorldGuardFlag.LAVA_FIRE);
+    }
+
+    @Test
     void vehicleTypesMatchUpstreamBoatsAndMinecartsOnly() {
         assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.OAK_BOAT)).isTrue();
         assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.BAMBOO_CHEST_RAFT)).isTrue();
@@ -426,6 +438,41 @@ final class WorldGuardProtectionHooksTests {
             "minecraft:overworld",
             pos,
             WorldGuardFlag.WITHER_DAMAGE
+        )).isTrue();
+    }
+
+    @Test
+    void globalSpecificEnvironmentFlagsDenySpecialMutations() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.SNOWMAN_TRAILS, FlagState.DENY)
+            .withFlag(WorldGuardFlag.EXP_DROPS, FlagState.DENY)
+            .withFlag(WorldGuardFlag.FROSTED_ICE_FORM, FlagState.DENY)
+            .withFlag(WorldGuardFlag.LAVA_FIRE, FlagState.DENY);
+        BlockPos pos = new BlockPos(5, 64, 5);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.snowmanTrailFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.experienceDropFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.frostedIceFormFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.lavaFireFlags()
         )).isTrue();
     }
 

@@ -494,6 +494,43 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void globalBlockTramplingDenyBeatsUnrelatedLocalBuildAllow() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion local = new WorldGuardRegion(
+            "farm",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            10,
+            Set.of(),
+            Map.of(WorldGuardFlag.BUILD, FlagState.ALLOW)
+        );
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluateBuild(
+            List.of(local, global),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            player,
+            List.of(),
+            false,
+            WorldGuardFlag.TRAMPLE_BLOCKS,
+            WorldGuardFlag.BUILD
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.flag()).isEqualTo(WorldGuardFlag.TRAMPLE_BLOCKS);
+        assertThat(decision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
     void ownersInheritedFromParentsBypassMemberDeny() {
         UUID owner = UUID.randomUUID();
         WorldGuardRegion parent = new WorldGuardRegion(

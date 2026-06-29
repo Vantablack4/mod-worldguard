@@ -42,7 +42,8 @@ and server-event behavior needed by the Vantablack server.
   pickup, vehicle and entity placement/destruction, item frame rotation,
   trampling, redstone triggers, hoppers, lightning,
   snow/ice weather, melt, growth, sapling/tree feature growth, spread, decay,
-  and fade mutations.
+  fade mutations, lava-created fire, frosted-ice formation, snowman snow
+  trails, and experience orb drops.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
   flags.
 - Upstream-style build action semantics for checked flag sets: specific action
