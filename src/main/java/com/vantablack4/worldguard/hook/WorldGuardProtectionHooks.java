@@ -120,6 +120,14 @@ public final class WorldGuardProtectionHooks {
         return deniesAny(level, pos, WorldGuardFlag.RAVAGER_RAVAGE, WorldGuardFlag.MOB_GRIEF);
     }
 
+    public static boolean deniesEnderDragonBlockDamage(Level level, BlockPos pos) {
+        return deniesAny(level, pos, WorldGuardFlag.ENDERDRAGON_BLOCK_DAMAGE);
+    }
+
+    public static boolean deniesWitherBlockDamage(Level level, BlockPos pos) {
+        return deniesAny(level, pos, WorldGuardFlag.WITHER_DAMAGE);
+    }
+
     public static boolean deniesMobSpawn(Level level, Entity entity) {
         if (!shouldCheck(level) || entity == null) {
             return false;

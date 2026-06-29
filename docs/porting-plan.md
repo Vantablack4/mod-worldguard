@@ -32,6 +32,7 @@ and server-event behavior needed by the Vantablack server.
   item use, bucket place/pickup internals, chest/container access on blocks and
   entities, entity use, entity attack, non-player entity damage, mob spawning,
   explosions, fire, fluids, pistons, practical Enderman/Ravager grief,
+  Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   use, chat send, sleep, PvP, fall damage, invincibility, item drop, item
   pickup, item frame rotation, trampling, redstone triggers, hoppers, lightning,
@@ -40,7 +41,8 @@ and server-event behavior needed by the Vantablack server.
   flags.
 - Runtime typed flag effects for greeting/farewell messages, custom deny
   messages, blocked/allowed player commands, game mode, heal/feed, deny-spawn,
-  and region teleport/spawn/teleport-message command targets.
+  player-scoped weather/time locks, respawn handling for the spawn location
+  flag, and region teleport/spawn/teleport-message command targets.
 
 ## Next Parity Work
 
@@ -51,12 +53,10 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Replace the Fabric-native group-permission bridge with direct LuckPerms group
   lookup if Vantablack adopts LuckPerms as a hard dependency.
 - Add recipient filtering for `receive-chat`.
-- Add remaining environmental hooks for sapling/tree feature growth and
-  dragon/wither non-explosion block damage.
-- Continue command parity work for upstream flags/options that Brigadier does
-  not expose yet: `-w`, `-n`, and list paging/filtering.
-- Wire remaining typed non-state flags into runtime behavior for weather/time
-  lock and respawn handling for the spawn location flag.
+- Add remaining environmental hooks for sapling/tree feature growth.
+- Continue command parity work for remaining upstream flags/options, including
+  region list owner/name-domain/selection filters (`-p`, `-n`, `-s`) and
+  `/region info` options.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
 

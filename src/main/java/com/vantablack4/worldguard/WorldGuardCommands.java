@@ -60,6 +60,10 @@ public final class WorldGuardCommands {
     private static final String DOMAIN_ARGUMENT = "domain";
     private static final String PRIORITY_ARGUMENT = "priority";
     private static final String BYPASS_ARGUMENT = "bypass";
+    private static final String LIST_PAGE_ARGUMENT = "page";
+    private static final String LIST_WORLD_ARGUMENT = "world";
+    private static final String LIST_ID_FILTER_ARGUMENT = "idSearch";
+    static final int LIST_PAGE_SIZE = 8;
     private static final List<String> REGION_GROUP_IDS = List.of(
         "members",
         "member",
@@ -135,7 +139,7 @@ public final class WorldGuardCommands {
             .then(Commands.literal("reload")
                 .requires(source -> mayRegion(source, "load"))
                 .executes(this::loadRegions))
-            .then(Commands.literal("list").executes(this::list))
+            .then(listArguments())
             .then(Commands.literal("info")
                 .executes(this::infoHere)
                 .then(regionArgument().executes(this::info)))
@@ -272,11 +276,47 @@ public final class WorldGuardCommands {
                     .executes(this::setBypass)));
     }
 
+    private LiteralArgumentBuilder<CommandSourceStack> listArguments() {
+        return Commands.literal("list")
+            .executes(this::list)
+            .then(listPageArgument())
+            .then(listWorldFlag(true))
+            .then(listIdFilterFlag(true));
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> listWorldFlag(boolean allowIdFilter) {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
+            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+            .suggests(this::suggestWorlds)
+            .executes(this::list)
+            .then(listPageArgument());
+        if (allowIdFilter) {
+            world.then(listIdFilterFlag(false));
+        }
+        return Commands.literal("-w").then(world);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> listIdFilterFlag(boolean allowWorld) {
+        RequiredArgumentBuilder<CommandSourceStack, String> idFilter = Commands
+            .argument(LIST_ID_FILTER_ARGUMENT, StringArgumentType.string())
+            .executes(this::list)
+            .then(listPageArgument());
+        if (allowWorld) {
+            idFilter.then(listWorldFlag(false));
+        }
+        return Commands.literal("-i").then(idFilter);
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, Integer> listPageArgument() {
+        return Commands.argument(LIST_PAGE_ARGUMENT, IntegerArgumentType.integer())
+            .executes(this::list);
+    }
+
     private int help(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         source.sendSystemMessage(header("WorldGuard"));
         source.sendSystemMessage(line("Region root", "/region, /regions, /rg"));
-        source.sendSystemMessage(line("Read", "/rg list | /rg info <region> | /rg flags <region>"));
+        source.sendSystemMessage(line("Read", "/rg list [page] | /rg info <region> | /rg flags <region>"));
         source.sendSystemMessage(line("Define", "/rg define <region> | /rg redefine <region>"));
         source.sendSystemMessage(line("WorldEdit", worldEditSelectionSource.description()));
         source.sendSystemMessage(line("Global", "/rg flag __global__ <flag> <allow|deny>"));
@@ -316,20 +356,35 @@ public final class WorldGuardCommands {
     }
 
     private int list(CommandContext<CommandSourceStack> context) {
-        String world = commandWorld(context);
-        List<WorldGuardRegion> regions = listRegions(world);
+        ListOptions options = listOptions(context);
+        List<WorldGuardRegion> regions = filterListRegions(listRegions(options.world()), options.idFilter());
+        int page = normalizeListPage(options.page());
+        int pageCount = listPageCount(regions.size(), LIST_PAGE_SIZE);
         context.getSource().sendSystemMessage(header("Regions"));
         if (regions.isEmpty()) {
-            context.getSource().sendSystemMessage(error("No regions are defined."));
+            context.getSource().sendSystemMessage(error(
+                options.idFilter().isBlank()
+                    ? WorldGuardText.noRegionsDefined()
+                    : WorldGuardText.noRegionsMatched(options.idFilter())
+            ));
             return 0;
         }
-        for (int index = 0; index < regions.size(); index++) {
-            WorldGuardRegion region = regions.get(index);
-            context.getSource().sendSystemMessage(Component.literal((index + 1) + ". ")
+        if (page > pageCount) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidListPage(page, pageCount)));
+            return 0;
+        }
+        if (pageCount > 1) {
+            context.getSource().sendSystemMessage(line("Page", page + "/" + pageCount));
+        }
+        int firstIndex = (page - 1) * LIST_PAGE_SIZE;
+        List<WorldGuardRegion> pageRegions = listPage(regions, page, LIST_PAGE_SIZE);
+        for (int index = 0; index < pageRegions.size(); index++) {
+            WorldGuardRegion region = pageRegions.get(index);
+            context.getSource().sendSystemMessage(Component.literal((firstIndex + index + 1) + ". ")
                 .withStyle(ChatFormatting.LIGHT_PURPLE)
                 .append(Component.literal(region.id()).withStyle(ChatFormatting.GOLD)));
         }
-        return regions.size();
+        return pageRegions.size();
     }
 
     private int infoHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -1232,6 +1287,14 @@ public final class WorldGuardCommands {
         return SharedSuggestionProvider.suggest(List.of("on", "off"), builder);
     }
 
+    private CompletableFuture<Suggestions> suggestWorlds(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(
+            context.getSource().getServer().levelKeys().stream()
+                .map(key -> key.identifier().toString()),
+            builder
+        );
+    }
+
     private String checkRegionId(CommandContext<CommandSourceStack> context, String rawId, boolean allowGlobal) {
         if (!WorldGuardStorage.validRegionId(rawId)) {
             context.getSource().sendSystemMessage(error(WorldGuardText.invalidRegionId(rawId)));
@@ -1343,6 +1406,14 @@ public final class WorldGuardCommands {
         }
     }
 
+    private Optional<Integer> optionalIntegerArgument(CommandContext<CommandSourceStack> context, String argumentName) {
+        try {
+            return Optional.of(getInteger(context, argumentName));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
     private void noRegion(CommandContext<CommandSourceStack> context, String id) {
         context.getSource().sendSystemMessage(error(WorldGuardText.noRegion(id)));
     }
@@ -1369,6 +1440,52 @@ public final class WorldGuardCommands {
         List<WorldGuardRegion> global = regions.stream().filter(WorldGuardRegion::global).toList();
         List<WorldGuardRegion> local = regions.stream().filter(region -> !region.global()).toList();
         return java.util.stream.Stream.concat(global.stream(), local.stream()).toList();
+    }
+
+    private ListOptions listOptions(CommandContext<CommandSourceStack> context) {
+        String world = optionalStringArgument(context, LIST_WORLD_ARGUMENT)
+            .map(WorldGuardStorage::normalizeWorld)
+            .orElseGet(() -> commandWorld(context));
+        String idFilter = optionalStringArgument(context, LIST_ID_FILTER_ARGUMENT)
+            .map(WorldGuardCommands::normalizeListIdFilter)
+            .orElse("");
+        int page = optionalIntegerArgument(context, LIST_PAGE_ARGUMENT).orElse(1);
+        return new ListOptions(world, idFilter, page);
+    }
+
+    static List<WorldGuardRegion> filterListRegions(List<WorldGuardRegion> regions, String rawIdFilter) {
+        String idFilter = normalizeListIdFilter(rawIdFilter);
+        if (idFilter.isBlank()) {
+            return List.copyOf(regions);
+        }
+        return regions.stream()
+            .filter(region -> region.id().contains(idFilter))
+            .toList();
+    }
+
+    static List<WorldGuardRegion> listPage(List<WorldGuardRegion> regions, int rawPage, int pageSize) {
+        int page = normalizeListPage(rawPage);
+        int firstIndex = (page - 1) * pageSize;
+        if (firstIndex >= regions.size()) {
+            return List.of();
+        }
+        int lastIndex = Math.min(firstIndex + pageSize, regions.size());
+        return List.copyOf(regions.subList(firstIndex, lastIndex));
+    }
+
+    static int listPageCount(int total, int pageSize) {
+        if (total <= 0) {
+            return 1;
+        }
+        return (total + pageSize - 1) / pageSize;
+    }
+
+    static int normalizeListPage(int rawPage) {
+        return Math.max(1, rawPage);
+    }
+
+    static String normalizeListIdFilter(String rawIdFilter) {
+        return rawIdFilter == null ? "" : rawIdFilter.trim().toLowerCase(Locale.ROOT);
     }
 
     private ServerPlayer playerOrMessage(CommandContext<CommandSourceStack> context, String message) throws CommandSyntaxException {
@@ -1592,6 +1709,9 @@ public final class WorldGuardCommands {
 
     private static Component error(String text) {
         return Component.literal(text).withStyle(ChatFormatting.RED);
+    }
+
+    private record ListOptions(String world, String idFilter, int page) {
     }
 
     private record DomainArgument(UUID playerUuid, String group) {

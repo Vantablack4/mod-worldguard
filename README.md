@@ -27,6 +27,7 @@ Included in the Fabric port:
   item use, bucket placement/pickup, chest/container access for blocks and
   entities, entity use, entity attack, non-player entity damage, mob spawning,
   explosions, fire spread, fluid flow, pistons, Enderman/Ravager grief,
+  Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   teleport use, chat send, sleep, PvP, fall damage, invincibility, item drop,
   item pickup, item frame rotation, crop and block trampling, pressure plates,
@@ -36,6 +37,8 @@ Included in the Fabric port:
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
   `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
   `game-mode`, and heal/feed flags.
+- Player-scoped runtime effects for `time-lock` and `weather-lock`, plus
+  region `spawn` location handling for respawns.
 - Region teleport command effects for `teleport`, `spawn`, and
   `teleport-message`, including upstream-style `/region teleport <region>`,
   `/region teleport -s <region>`, and `/region teleport -c <region>` forms.
@@ -52,13 +55,11 @@ Included in the Fabric port:
 Not included yet:
 
 - Full WorldGuard Bukkit API compatibility.
-- Runtime effects for `weather-lock`, `time-lock`, and respawn handling for the
-  `spawn` location flag.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
-- Upstream command options that are not yet represented by Brigadier flags:
-  `-w`, `-n`, and list paging/filtering.
-- Recipient chat filtering, sapling/tree feature growth, and dragon/wither
-  non-explosion block damage.
+- Upstream command options that are not yet represented by Brigadier flags,
+  including region list owner/name-domain/selection filters (`-p`, `-n`, `-s`)
+  and remaining `/region info` options.
+- Recipient chat filtering and sapling/tree feature growth.
 
 ## Commands
 
@@ -66,7 +67,9 @@ Not included yet:
 /wg
 /wg version
 /wg reload
-/region list
+/region list [page]
+/region list -i <id-search> [page]
+/region list -w <world> [-i <id-search>] [page]
 /region info [region]
 /region i [region]
 /region define <region>

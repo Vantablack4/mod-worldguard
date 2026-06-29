@@ -48,6 +48,17 @@ final class WorldGuardCommandsTests {
 
         for (String rootName : List.of("region", "regions", "rg")) {
             CommandNode<CommandSourceStack> root = root(dispatcher, rootName);
+            CommandNode<CommandSourceStack> list = root.getChild("list");
+            assertThat(list).isNotNull();
+            assertThat(list.getChild("page")).isNotNull();
+            assertThat(list.getChild("-i").getChild("idSearch")).isNotNull();
+            assertThat(list.getChild("-i").getChild("idSearch").getChild("page")).isNotNull();
+            assertThat(list.getChild("-i").getChild("idSearch").getChild("-w").getChild("world")).isNotNull();
+            assertThat(list.getChild("-w").getChild("world")).isNotNull();
+            assertThat(list.getChild("-w").getChild("world").getChild("page")).isNotNull();
+            assertThat(list.getChild("-w").getChild("world").getChild("-i").getChild("idSearch")).isNotNull();
+            assertThat(list.getChild("-p")).isNull();
+            assertThat(list.getChild("-n")).isNull();
             assertThat(root.getChild("define")).isNotNull();
             assertThat(root.getChild("def")).isNotNull();
             assertThat(root.getChild("d")).isNotNull();
@@ -87,6 +98,46 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("owner")).isNull();
             assertThat(root.getChild("member")).isNull();
         }
+    }
+
+    @Test
+    void listHelpersFilterRegionIdsAndPageResults() {
+        List<WorldGuardRegion> regions = List.of(
+            WorldGuardRegion.global("minecraft:overworld"),
+            region("spawn"),
+            region("market"),
+            region("spawn_west")
+        );
+
+        assertThat(WorldGuardCommands.filterListRegions(regions, "SPAWN"))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("spawn", "spawn_west");
+        assertThat(WorldGuardCommands.filterListRegions(regions, "  "))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("__global__", "spawn", "market", "spawn_west");
+
+        List<WorldGuardRegion> pagedRegions = List.of(
+            region("r1"),
+            region("r2"),
+            region("r3"),
+            region("r4"),
+            region("r5"),
+            region("r6"),
+            region("r7"),
+            region("r8"),
+            region("r9")
+        );
+        assertThat(WorldGuardCommands.normalizeListPage(0)).isEqualTo(1);
+        assertThat(WorldGuardCommands.listPageCount(pagedRegions.size(), WorldGuardCommands.LIST_PAGE_SIZE))
+            .isEqualTo(2);
+        assertThat(WorldGuardCommands.listPage(pagedRegions, 1, WorldGuardCommands.LIST_PAGE_SIZE))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8");
+        assertThat(WorldGuardCommands.listPage(pagedRegions, 2, WorldGuardCommands.LIST_PAGE_SIZE))
+            .extracting(WorldGuardRegion::id)
+            .containsExactly("r9");
+        assertThat(WorldGuardCommands.listPage(pagedRegions, 3, WorldGuardCommands.LIST_PAGE_SIZE))
+            .isEmpty();
     }
 
     @Test
@@ -237,6 +288,10 @@ final class WorldGuardCommandsTests {
         CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(name);
         assertThat(root).as(name).isNotNull();
         return root;
+    }
+
+    private static WorldGuardRegion region(String id) {
+        return WorldGuardRegion.defaultProtected(id, "minecraft:overworld", 0, 0, 0, 1, 1, 1, 0);
     }
 
     private static WorldEditSelectionSource unavailableWorldEdit() {

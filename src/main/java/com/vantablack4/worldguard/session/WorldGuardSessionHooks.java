@@ -10,16 +10,25 @@ import java.util.UUID;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.clock.ClockNetworkState;
+import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.food.FoodData;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
 
 import com.vantablack4.worldguard.ProtectionDecision;
@@ -86,12 +95,19 @@ public final class WorldGuardSessionHooks {
         WorldGuardSessionRuntime active = runtime;
         return active == null || active.allowCommand(player, command);
     }
+
+    public static TeleportTransition respawnTransition(ServerPlayer player, TeleportTransition vanillaTransition) {
+        WorldGuardSessionRuntime active = runtime;
+        return active == null ? vanillaTransition : active.respawnTransition(player, vanillaTransition);
+    }
 }
 
 final class WorldGuardSessionRuntime {
     private final WorldGuardService service;
     private final Map<UUID, WorldGuardSessionSnapshot> snapshots = new HashMap<>();
     private final Map<UUID, GameType> previousGameModes = new HashMap<>();
+    private final Map<UUID, String> activeTimeLocks = new HashMap<>();
+    private final Map<UUID, String> activeWeatherLocks = new HashMap<>();
 
     WorldGuardSessionRuntime(WorldGuardService service) {
         this.service = Objects.requireNonNull(service, "service");
@@ -100,6 +116,8 @@ final class WorldGuardSessionRuntime {
     void evict(UUID playerUuid) {
         snapshots.remove(playerUuid);
         previousGameModes.remove(playerUuid);
+        activeTimeLocks.remove(playerUuid);
+        activeWeatherLocks.remove(playerUuid);
     }
 
     void refresh(ServerPlayer player) {
@@ -236,6 +254,41 @@ final class WorldGuardSessionRuntime {
         return allowed;
     }
 
+    TeleportTransition respawnTransition(ServerPlayer player, TeleportTransition vanillaTransition) {
+        if (player == null || vanillaTransition == null) {
+            return vanillaTransition;
+        }
+
+        List<WorldGuardRegion> regions = service.storage().regions();
+        Optional<WorldGuardFlagValue.LocationValue> location = WorldGuardSessionRules.respawnLocation(
+            regions,
+            worldId(player.level()),
+            player.blockPosition(),
+            player.getUUID(),
+            service.regionGroups(player, regions)
+        );
+        if (location.isEmpty()) {
+            return vanillaTransition;
+        }
+
+        ServerLevel level = level(player, location.get().world());
+        if (level == null) {
+            return vanillaTransition;
+        }
+
+        return new TeleportTransition(
+            level,
+            new Vec3(location.get().x(), location.get().y(), location.get().z()),
+            vanillaTransition.deltaMovement(),
+            location.get().yaw(),
+            location.get().pitch(),
+            false,
+            vanillaTransition.asPassenger(),
+            vanillaTransition.relatives(),
+            vanillaTransition.postTeleportTransition()
+        );
+    }
+
     boolean allowDamage(LivingEntity entity, DamageSource source) {
         if (!(entity instanceof ServerPlayer victim)) {
             return allowNonPlayerDamage(entity, source);
@@ -359,6 +412,8 @@ final class WorldGuardSessionRuntime {
         String world = worldId(player.level());
         BlockPos pos = player.blockPosition();
         applyGameMode(player, regions, groups, world, pos);
+        applyTimeLock(player, regions, groups, world, pos);
+        applyWeatherLock(player, regions, groups, world, pos);
         applyHeal(player, regions, groups, world, pos);
         applyFeed(player, regions, groups, world, pos);
     }
@@ -386,6 +441,46 @@ final class WorldGuardSessionRuntime {
                     player.setGameMode(previous);
                 }
             });
+    }
+
+    private void applyTimeLock(ServerPlayer player, List<WorldGuardRegion> regions, Set<String> groups, String world, BlockPos pos) {
+        Optional<String> raw = value(regions, groups, world, pos, player, WorldGuardValueFlag.TIME_LOCK)
+            .map(WorldGuardFlagValue::serialized)
+            .filter(value -> WorldGuardSessionRules.timeLock(value).isPresent());
+        if (raw.isPresent()) {
+            String current = activeTimeLocks.put(player.getUUID(), raw.get());
+            if (!raw.get().equals(current) || shouldRefreshVisualLock(player)) {
+                WorldGuardSessionRules.timeLock(raw.get()).ifPresent(lock -> sendPlayerTime(player, lock));
+            }
+            return;
+        }
+
+        if (activeTimeLocks.remove(player.getUUID()) != null) {
+            player.connection.send(player.level().getServer().clockManager().createFullSyncPacket());
+        }
+    }
+
+    private void applyWeatherLock(
+        ServerPlayer player,
+        List<WorldGuardRegion> regions,
+        Set<String> groups,
+        String world,
+        BlockPos pos
+    ) {
+        Optional<String> raw = value(regions, groups, world, pos, player, WorldGuardValueFlag.WEATHER_LOCK)
+            .map(WorldGuardFlagValue::serialized)
+            .filter(value -> WorldGuardSessionRules.weatherLock(value).isPresent());
+        if (raw.isPresent()) {
+            String current = activeWeatherLocks.put(player.getUUID(), raw.get());
+            if (!raw.get().equals(current) || shouldRefreshVisualLock(player)) {
+                WorldGuardSessionRules.weatherLock(raw.get()).ifPresent(lock -> sendPlayerWeather(player, lock));
+            }
+            return;
+        }
+
+        if (activeWeatherLocks.remove(player.getUUID()) != null) {
+            sendVanillaWeather(player);
+        }
     }
 
     private void applyHeal(ServerPlayer player, List<WorldGuardRegion> regions, Set<String> groups, String world, BlockPos pos) {
@@ -461,6 +556,66 @@ final class WorldGuardSessionRuntime {
 
     private static String worldId(Level world) {
         return world.dimension().identifier().toString();
+    }
+
+    private static boolean shouldRefreshVisualLock(ServerPlayer player) {
+        return player.tickCount % 20 == 0;
+    }
+
+    private static ServerLevel level(ServerPlayer player, String world) {
+        Identifier identifier = Identifier.tryParse(world);
+        if (identifier == null) {
+            return null;
+        }
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, identifier);
+        return player.level().getServer().getLevel(key);
+    }
+
+    private static void sendPlayerTime(ServerPlayer player, WorldGuardSessionRules.TimeLock lock) {
+        Optional<Holder<WorldClock>> defaultClock = player.level().dimensionType().defaultClock();
+        if (defaultClock.isEmpty()) {
+            return;
+        }
+
+        long totalTicks = lock.relative()
+            ? player.level().getDefaultClockTime() + lock.value()
+            : lock.value();
+        player.connection.send(new ClientboundSetTimePacket(
+            player.level().getGameTime(),
+            Map.of(defaultClock.get(), new ClockNetworkState(totalTicks, 0F, lock.relative() ? 1F : 0F))
+        ));
+    }
+
+    private static void sendPlayerWeather(ServerPlayer player, WorldGuardSessionRules.WeatherLock lock) {
+        switch (lock) {
+            case CLEAR -> sendWeather(player, false, 0F, 0F);
+            case RAIN -> sendWeather(player, true, 1F, 0F);
+            case THUNDER_STORM -> sendWeather(player, true, 1F, 1F);
+        }
+    }
+
+    private static void sendVanillaWeather(ServerPlayer player) {
+        ServerLevel level = player.level();
+        if (level.isRaining()) {
+            sendWeather(player, true, level.getRainLevel(1F), level.getThunderLevel(1F));
+        } else {
+            sendWeather(player, false, 0F, 0F);
+        }
+    }
+
+    private static void sendWeather(ServerPlayer player, boolean raining, float rainLevel, float thunderLevel) {
+        player.connection.send(new ClientboundGameEventPacket(
+            raining ? ClientboundGameEventPacket.START_RAINING : ClientboundGameEventPacket.STOP_RAINING,
+            0F
+        ));
+        player.connection.send(new ClientboundGameEventPacket(
+            ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
+            rainLevel
+        ));
+        player.connection.send(new ClientboundGameEventPacket(
+            ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+            thunderLevel
+        ));
     }
 
     private static Entity damageSource(DamageSource source) {

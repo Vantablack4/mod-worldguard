@@ -15,7 +15,9 @@ import com.vantablack4.worldguard.FlagState;
 import com.vantablack4.worldguard.WorldGuardFlag;
 import com.vantablack4.worldguard.WorldGuardRegion;
 import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+import com.vantablack4.worldguard.model.RegionType;
 
 final class WorldGuardSessionRulesTests {
     private static final String WORLD = "minecraft:overworld";
@@ -237,6 +239,92 @@ final class WorldGuardSessionRulesTests {
             false,
             "home"
         )).isFalse();
+    }
+
+    @Test
+    void respawnLocationUsesSpawnFlagDefaultMemberGroup() {
+        WorldGuardFlagValue.LocationValue spawn = WorldGuardFlagValue.location(
+            WORLD,
+            25,
+            72,
+            -4,
+            90,
+            10
+        ).orElseThrow().asLocation().orElseThrow();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            WORLD,
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            "",
+            RegionType.CUBOID,
+            Set.of(),
+            Set.of(PLAYER),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        ).withValue(
+            WorldGuardValueFlag.SPAWN,
+            WorldGuardFlagValue.location(WORLD, spawn.x(), spawn.y(), spawn.z(), spawn.yaw(), spawn.pitch()).orElseThrow()
+        );
+
+        assertThat(WorldGuardSessionRules.respawnLocation(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 1),
+            PLAYER,
+            Set.of()
+        )).contains(spawn);
+        assertThat(WorldGuardSessionRules.respawnLocation(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 1),
+            UUID.fromString("00000000-0000-0000-0000-000000000002"),
+            Set.of()
+        )).isEmpty();
+    }
+
+    @Test
+    void respawnLocationHonorsExplicitSpawnGroup() {
+        WorldGuardFlagValue spawn = WorldGuardFlagValue.location(WORLD, 1, 2, 3, 4, 5).orElseThrow();
+        WorldGuardRegion region = region("spawn", Map.of())
+            .withValue(WorldGuardValueFlag.SPAWN, spawn)
+            .withFlagGroup(WorldGuardValueFlag.SPAWN, WorldGuardRegionGroup.ALL);
+
+        assertThat(WorldGuardSessionRules.respawnLocation(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 1),
+            UUID.fromString("00000000-0000-0000-0000-000000000002"),
+            Set.of()
+        )).contains(spawn.asLocation().orElseThrow());
+    }
+
+    @Test
+    void timeLockAcceptsUpstreamAbsoluteAndRelativeNumericValues() {
+        assertThat(WorldGuardSessionRules.timeLock("6000"))
+            .contains(new WorldGuardSessionRules.TimeLock(6000, false));
+        assertThat(WorldGuardSessionRules.timeLock("+1200"))
+            .contains(new WorldGuardSessionRules.TimeLock(1200, true));
+        assertThat(WorldGuardSessionRules.timeLock("-500"))
+            .contains(new WorldGuardSessionRules.TimeLock(-500, true));
+        assertThat(WorldGuardSessionRules.timeLock("day")).isEmpty();
+    }
+
+    @Test
+    void weatherLockRecognizesUpstreamWeatherIds() {
+        assertThat(WorldGuardSessionRules.weatherLock("clear"))
+            .contains(WorldGuardSessionRules.WeatherLock.CLEAR);
+        assertThat(WorldGuardSessionRules.weatherLock("rain"))
+            .contains(WorldGuardSessionRules.WeatherLock.RAIN);
+        assertThat(WorldGuardSessionRules.weatherLock("thunder-storm"))
+            .contains(WorldGuardSessionRules.WeatherLock.THUNDER_STORM);
+        assertThat(WorldGuardSessionRules.weatherLock("snow")).isEmpty();
     }
 
     @Test

@@ -31,6 +31,18 @@ final class WorldGuardText {
         return "You're standing in several regions (please pick one).";
     }
 
+    static String noRegionsDefined() {
+        return "No regions are defined.";
+    }
+
+    static String noRegionsMatched(String idFilter) {
+        return "No regions matched the id search '" + idFilter + "'.";
+    }
+
+    static String invalidListPage(int page, int pageCount) {
+        return "Page " + page + " is not valid. Available pages: 1-" + pageCount + ".";
+    }
+
     static String createdRegion(String id) {
         return "A new region has been made named '" + id + "'.";
     }

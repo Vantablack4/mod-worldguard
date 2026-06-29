@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.MobCategory;
@@ -22,7 +23,18 @@ import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 import com.vantablack4.worldguard.model.RegionQueryEngine;
 
 public final class WorldGuardSessionRules {
+    private static final Pattern TIME_LOCK_PATTERN = Pattern.compile("[+-]?\\d+");
+
     private WorldGuardSessionRules() {
+    }
+
+    public record TimeLock(long value, boolean relative) {
+    }
+
+    public enum WeatherLock {
+        CLEAR,
+        RAIN,
+        THUNDER_STORM
     }
 
     public static WorldGuardSessionSnapshot snapshot(
@@ -329,6 +341,55 @@ public final class WorldGuardSessionRules {
         );
         Set<String> allowedCommands = allowed.value().map(WorldGuardFlagValue::asSet).orElse(Set.of());
         return allowedCommands.isEmpty() || allowedCommands.stream().anyMatch(rule -> commandMatches(rule, command));
+    }
+
+    public static Optional<WorldGuardFlagValue.LocationValue> respawnLocation(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        BlockPos pos,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
+        if (world == null || pos == null) {
+            return Optional.empty();
+        }
+        return RegionQueryEngine.queryValue(
+            regionList(regions),
+            world,
+            pos.getX(),
+            pos.getY(),
+            pos.getZ(),
+            WorldGuardValueFlag.SPAWN,
+            playerUuid,
+            playerGroups
+        ).value().flatMap(WorldGuardFlagValue::asLocation);
+    }
+
+    public static Optional<TimeLock> timeLock(String raw) {
+        if (raw == null || !TIME_LOCK_PATTERN.matcher(raw.trim()).matches()) {
+            return Optional.empty();
+        }
+        String normalized = raw.trim();
+        try {
+            return Optional.of(new TimeLock(
+                Long.parseLong(normalized),
+                normalized.startsWith("+") || normalized.startsWith("-")
+            ));
+        } catch (NumberFormatException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public static Optional<WeatherLock> weatherLock(String raw) {
+        if (raw == null) {
+            return Optional.empty();
+        }
+        return switch (raw.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "clear", "none", "sun", "sunny" -> Optional.of(WeatherLock.CLEAR);
+            case "rain", "downfall" -> Optional.of(WeatherLock.RAIN);
+            case "thunder-storm", "thunderstorm", "storm", "thunder" -> Optional.of(WeatherLock.THUNDER_STORM);
+            default -> Optional.empty();
+        };
     }
 
     private static boolean changedRegions(WorldGuardSessionSnapshot previous, WorldGuardSessionSnapshot current) {

@@ -19,6 +19,12 @@ final class WorldGuardTextTests {
             .isEqualTo("Please specify the region with /region flags -w world_name region_name.");
         assertThat(WorldGuardText.multipleStandingRegions())
             .isEqualTo("You're standing in several regions (please pick one).");
+        assertThat(WorldGuardText.noRegionsDefined())
+            .isEqualTo("No regions are defined.");
+        assertThat(WorldGuardText.noRegionsMatched("spawn"))
+            .isEqualTo("No regions matched the id search 'spawn'.");
+        assertThat(WorldGuardText.invalidListPage(3, 2))
+            .isEqualTo("Page 3 is not valid. Available pages: 1-2.");
         assertThat(WorldGuardText.createdRegion("spawn"))
             .isEqualTo("A new region has been made named 'spawn'.");
         assertThat(WorldGuardText.claimedRegion("spawn"))

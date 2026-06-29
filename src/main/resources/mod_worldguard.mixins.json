@@ -8,6 +8,7 @@
     "ButtonBlockMixin",
     "CoralBlockMixin",
     "CropGrowthBlockMixin",
+    "EnderDragonMixin",
     "EntityDamageMixin",
     "EntityTeleportMixin",
     "EndermanLeaveBlockGoalMixin",
@@ -25,6 +26,7 @@
     "LiquidBlockMixin",
     "MushroomBlockMixin",
     "PistonBaseBlockMixin",
+    "PlayerListMixin",
     "PointedDripstoneBlockMixin",
     "PortalBlockMixin",
     "PowderSnowBlockMixin",
@@ -41,7 +43,8 @@
     "TripWireBlockMixin",
     "TurtleEggBlockMixin",
     "VineBlockMixin",
-    "WeatheringCopperBlockMixin"
+    "WeatheringCopperBlockMixin",
+    "WitherBossMixin"
   ],
   "injectors": {
     "defaultRequire": 1

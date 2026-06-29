@@ -224,6 +224,27 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void dragonAndWitherBlockDamageFlagsDenyBossBlockMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.ENDERDRAGON_BLOCK_DAMAGE, FlagState.DENY)
+            .withFlag(WorldGuardFlag.WITHER_DAMAGE, FlagState.DENY);
+        BlockPos pos = new BlockPos(5, 64, 5);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardFlag.ENDERDRAGON_BLOCK_DAMAGE
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardFlag.WITHER_DAMAGE
+        )).isTrue();
+    }
+
+    @Test
     void membersDoNotBypassNonPlayerBuildMutation() {
         WorldGuardRegion region = new WorldGuardRegion(
             "home",
