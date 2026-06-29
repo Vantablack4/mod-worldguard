@@ -48,4 +48,17 @@ public abstract class FarmlandBlockMixin {
             callbackInfo.cancel();
         }
     }
+
+    @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
+    private void mod_worldguard$denyProtectedScheduledDrying(
+        BlockState state,
+        ServerLevel level,
+        BlockPos pos,
+        RandomSource random,
+        CallbackInfo callbackInfo
+    ) {
+        if (WorldGuardProtectionHooks.deniesFarmlandDry(level, pos)) {
+            callbackInfo.cancel();
+        }
+    }
 }

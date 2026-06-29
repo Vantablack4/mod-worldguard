@@ -36,6 +36,10 @@ and server-event behavior needed by the Vantablack server.
   use, chat send, sleep, PvP, fall damage, invincibility, item drop, item
   pickup, item frame rotation, trampling, redstone triggers, hoppers, lightning,
   snow/ice weather, melt, growth, spread, decay, and fade mutations.
+- Typed `/rg flag` values and `-g` region-group targeting for state and typed
+  flags.
+- Runtime typed flag effects for greeting/farewell messages, custom deny
+  messages, blocked/allowed player commands, game mode, and heal/feed.
 
 ## Next Parity Work
 
@@ -49,11 +53,9 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Add remaining environmental hooks for sapling/tree feature growth and
   dragon/wither non-explosion block damage.
 - Continue command parity work for upstream flags/options that Brigadier does
-  not expose yet: `-w`, `-g`, `-n`, typed `/rg flag` values, and list
-  paging/filtering.
-- Wire typed non-state flags into runtime behavior for greeting/farewell,
-  heal/feed, weather/time lock, game mode, command allow/block lists, and
-  teleport/spawn values.
+  not expose yet: `-w`, `-n`, and list paging/filtering.
+- Wire remaining typed non-state flags into runtime behavior for weather/time
+  lock and teleport/spawn values.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
 

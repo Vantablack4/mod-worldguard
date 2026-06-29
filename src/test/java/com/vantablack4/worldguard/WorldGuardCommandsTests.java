@@ -131,6 +131,39 @@ final class WorldGuardCommandsTests {
         }
     }
 
+    @Test
+    void flagCommandRegistersTypedValuesAndGroupTargetingAfterFlag() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir, 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+
+        commands.register(dispatcher);
+
+        CommandNode<CommandSourceStack> flag = root(dispatcher, "rg")
+            .getChild("flag")
+            .getChild("region")
+            .getChild("flag");
+        assertThat(flag.getChild("value")).isNotNull();
+
+        CommandNode<CommandSourceStack> groupLiteral = flag.getChild("-g");
+        assertThat(groupLiteral).isNotNull();
+        CommandNode<CommandSourceStack> group = groupLiteral.getChild("group");
+        assertThat(group).isNotNull();
+        assertThat(group.getChild("value")).isNotNull();
+
+        assertThat(root(dispatcher, "rg")
+            .getChild("flag")
+            .getChild("region")
+            .getChild("-g"))
+            .isNull();
+    }
+
     private static CommandNode<CommandSourceStack> root(
         CommandDispatcher<CommandSourceStack> dispatcher,
         String name

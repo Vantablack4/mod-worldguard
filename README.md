@@ -19,8 +19,9 @@ Included in the Fabric port:
 - Cuboid, polygonal 2D, and global regions stored per dimension.
 - Region priority, owners, members, owner/member groups, parent inheritance, and
   explicit state flags.
-- Typed non-state flag metadata and storage for upstream-style string, set,
-  location, numeric, boolean, and registry-valued flags.
+- Typed non-state flag metadata, command editing, storage, per-flag groups, and
+  runtime effects for upstream-style string, set, location, numeric, boolean,
+  and registry-valued flags where Fabric exposes a safe server hook.
 - `/wg`, `/worldguard`, `/region`, `/regions`, and `/rg` commands.
 - Protection hooks for block break, block attack, block use/place attempts,
   item use, bucket placement/pickup, chest/container access for blocks and
@@ -32,6 +33,9 @@ Included in the Fabric port:
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
   leaf decay, mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk
   mutations.
+- Runtime effects for `greeting`, `farewell`, `deny-message`,
+  `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
+  `game-mode`, and heal/feed flags.
 - Fabric permission API integration for `mod_worldguard:admin` and
   `mod_worldguard:bypass`, upstream-style `worldguard:region.*` command/bypass
   permission aliases, plus region group matching through
@@ -45,12 +49,11 @@ Included in the Fabric port:
 Not included yet:
 
 - Full WorldGuard Bukkit API compatibility.
-- Runtime effects for many typed non-state flags, including greeting/farewell,
-  heal/feed, weather/time lock, game mode, command allow/block lists, and
-  teleport/spawn values.
+- Runtime effects for `weather-lock`, `time-lock`, `teleport`, `spawn`, and
+  `teleport-message`.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags:
-  `-w`, `-g`, `-n`, typed `/rg flag` values, and list paging/filtering.
+  `-w`, `-n`, and list paging/filtering.
 - Recipient chat filtering, sapling/tree feature growth, and dragon/wither
   non-explosion block damage.
 
@@ -74,6 +77,9 @@ Not included yet:
 /region remove <region>
 /region flags <region>
 /region flag <region> <flag> [allow|deny|unset]
+/region flag <region> <flag> -g <members|owners|nonmembers|nonowners|all|none>
+/region flag <region> <typed-flag> <value>
+/region flag <region> <typed-flag> -g <group> <value>
 /region setpriority <region> <priority>
 /region setparent <region> [parent]
 /region addowner <region> <player|uuid:<uuid>|g:<group>> [...]
@@ -108,8 +114,10 @@ Mutating commands accept upstream-style Fabric permission identifiers like
 `worldguard:region.toggle-bypass`; `mod_worldguard:admin` remains the fallback
 operator-level admin permission. Protection bypass checks `mod_worldguard:bypass`
 or `worldguard:region.bypass` / `worldguard:region.bypass.<world>`, unless the
-player has disabled bypass with `/region bypass off`. Region owner/member groups
-match players that have `mod_worldguard:region.group.<group>`.
+player has disabled bypass with `/region bypass off`. Operators do not bypass
+protection solely because they can administer regions; grant a bypass permission
+explicitly when that behavior is wanted. Region owner/member groups match
+players that have `mod_worldguard:region.group.<group>`.
 
 When WorldEdit is installed, `/region define <region>` imports the executing
 player's complete WorldEdit cuboid or polygonal selection. `/region define <region>
@@ -179,13 +187,16 @@ notify-leave
 
 Flags resolve by region priority. The highest priority matching region with an
 explicit flag value decides the action. Members bypass denies from their own
-matching region; operators at the configured admin level bypass all checks.
+matching region when the flag has member-bypass semantics. Players with an
+explicit bypass permission bypass all protection checks until they disable bypass
+with `/region bypass off`.
 
 The storage model also recognizes and round-trips typed upstream-style flags
 such as `teleport`, `spawn`, `teleport-message`, `deny-message`, `greeting`,
 `farewell`, `blocked-cmds`, `allowed-cmds`, `deny-spawn`, `weather-lock`,
-`time-lock`, `game-mode`, heal/feed options, and per-flag region groups. The
-current `/region flag` command still edits state flags only.
+`time-lock`, `game-mode`, heal/feed options, and per-flag region groups.
+`/region flag` edits both state flags and typed flags. Clearing a flag with no
+value also clears that flag's explicit `-g` group, matching upstream WorldGuard.
 
 ## Configuration
 

@@ -4,6 +4,7 @@ import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -37,6 +38,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
+import com.vantablack4.worldguard.flag.WorldGuardFlagType;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 import com.vantablack4.worldguard.worldedit.WorldEditRegionSelection;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionSource;
@@ -46,11 +51,32 @@ public final class WorldGuardCommands {
     private static final String ID_ARGUMENT = "region";
     private static final String PARENT_ARGUMENT = "parent";
     private static final String FLAG_ARGUMENT = "flag";
-    private static final String STATE_ARGUMENT = "state";
+    private static final String VALUE_ARGUMENT = "value";
+    private static final String GROUP_ARGUMENT = "group";
     private static final String PLAYER_ARGUMENT = "player";
     private static final String DOMAIN_ARGUMENT = "domain";
     private static final String PRIORITY_ARGUMENT = "priority";
     private static final String BYPASS_ARGUMENT = "bypass";
+    private static final List<String> REGION_GROUP_IDS = List.of(
+        "members",
+        "member",
+        "owners",
+        "owner",
+        "nonmembers",
+        "nonmember",
+        "non-members",
+        "non-member",
+        "nonowners",
+        "nonowner",
+        "non-owners",
+        "non-owner",
+        "everyone",
+        "anyone",
+        "all",
+        "none",
+        "noone",
+        "deny"
+    );
     private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
         new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
@@ -253,7 +279,7 @@ public final class WorldGuardCommands {
         source.sendSystemMessage(line("Define", "/rg define <region> | /rg redefine <region>"));
         source.sendSystemMessage(line("WorldEdit", worldEditSelectionSource.description()));
         source.sendSystemMessage(line("Global", "/rg flag __global__ <flag> <allow|deny>"));
-        source.sendSystemMessage(line("Flags", "/rg flag <region> <flag> [allow|deny]"));
+        source.sendSystemMessage(line("Flags", "/rg flag <region> <flag> [-g <group>] [value]"));
         source.sendSystemMessage(line("Regions", "/rg setpriority <region> <priority> | /rg setparent <region> [parent]"));
         source.sendSystemMessage(line("Owners", "/rg addowner <region> <player> | /rg removeowner <region> <player>"));
         source.sendSystemMessage(line("Members", "/rg addmember <region> <player> | /rg removemember <region> <player>"));
@@ -574,69 +600,171 @@ public final class WorldGuardCommands {
     }
 
     private int setFlag(CommandContext<CommandSourceStack> context) {
-        return setRegionFlag(context, getString(context, ID_ARGUMENT));
+        return setRegionFlag(context, getString(context, ID_ARGUMENT), getString(context, VALUE_ARGUMENT));
     }
 
-    private int setRegionFlag(CommandContext<CommandSourceStack> context, String rawId) {
-        WorldGuardFlag flag = WorldGuardFlag.parse(getString(context, FLAG_ARGUMENT)).orElse(null);
-        if (flag == null) {
-            sendUnknownFlag(context, getString(context, FLAG_ARGUMENT));
+    private int setRegionFlag(CommandContext<CommandSourceStack> context, String rawId, String rawValue) {
+        FlagTarget target = flagTarget(context);
+        if (target == null) {
             return 0;
         }
-        String id = checkRegionId(context, rawId, true);
+        GroupTarget group = groupTarget(context, target);
+        if (group.invalid()) {
+            return 0;
+        }
+        String id = regionIdForAllowedGlobalCommand(context, rawId);
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        if (id.equals(WorldGuardRegion.GLOBAL_REGION_ID)) {
-            storage.findOrCreateGlobal(world);
-        } else if (storage.find(id, world).isEmpty()) {
-            noRegion(context, id);
-            return 0;
+        if (target.stateFlag() != null) {
+            return setStateFlag(context, id, world, target.stateFlag(), rawValue, group);
         }
-        FlagState state = FlagState.parse(getString(context, STATE_ARGUMENT)).orElse(null);
-        if (state == null) {
-            context.getSource().sendSystemMessage(error(WorldGuardText.invalidStateFlag(getString(context, STATE_ARGUMENT))));
-            return 0;
-        }
-        return storage.setFlag(id, world, flag, state)
-            .map(region -> {
-                if (state == FlagState.UNSET) {
-                    context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(flag.id(), region.id())));
-                } else {
-                    context.getSource().sendSystemMessage(success(WorldGuardText.flagSet(flag.id(), region.id(), state.id())));
-                }
-                return 1;
-            })
-            .orElseGet(() -> {
-                noRegion(context, id);
-                return 0;
-            });
+        return setValueFlag(context, id, world, target.valueFlag(), rawValue, group);
     }
 
     private int clearRegionFlag(CommandContext<CommandSourceStack> context) {
-        WorldGuardFlag flag = WorldGuardFlag.parse(getString(context, FLAG_ARGUMENT)).orElse(null);
-        if (flag == null) {
-            sendUnknownFlag(context, getString(context, FLAG_ARGUMENT));
+        FlagTarget target = flagTarget(context);
+        if (target == null) {
             return 0;
         }
-        String id = checkRegionId(context, getString(context, ID_ARGUMENT), true);
+        GroupTarget group = groupTarget(context, target);
+        if (group.invalid()) {
+            return 0;
+        }
+        String id = regionIdForAllowedGlobalCommand(context, getString(context, ID_ARGUMENT));
         if (id.isBlank()) {
             return 0;
         }
         String world = commandWorld(context);
-        if (id.equals(WorldGuardRegion.GLOBAL_REGION_ID)) {
-            storage.findOrCreateGlobal(world);
-        } else if (storage.find(id, world).isEmpty()) {
+        Optional<WorldGuardRegion> updated = target.stateFlag() != null
+            ? storage.setFlag(id, world, target.stateFlag(), FlagState.UNSET)
+            : storage.setValue(id, world, target.valueFlag(), null);
+        if (updated.isEmpty()) {
             noRegion(context, id);
             return 0;
         }
-        return storage.setFlag(id, world, flag, FlagState.UNSET)
-            .map(region -> {
-                context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(flag.id(), region.id())));
-                return 1;
-            })
-            .orElse(0);
+        clearFlagGroup(id, world, target);
+        context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(target.id(), updated.get().id())));
+        return 1;
+    }
+
+    private int setStateFlag(
+        CommandContext<CommandSourceStack> context,
+        String id,
+        String world,
+        WorldGuardFlag flag,
+        String rawValue,
+        GroupTarget group
+    ) {
+        FlagState state = FlagState.parse(rawValue).orElse(null);
+        if (state == null) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidStateFlag(rawValue)));
+            return 0;
+        }
+        Optional<WorldGuardRegion> updated = storage.setFlag(id, world, flag, state);
+        if (updated.isEmpty()) {
+            noRegion(context, id);
+            return 0;
+        }
+        if (state == FlagState.UNSET) {
+            clearFlagGroup(id, world, new FlagTarget(flag, null, flag.id()));
+            context.getSource().sendSystemMessage(success(WorldGuardText.flagRemoved(flag.id(), updated.get().id())));
+            return 1;
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.flagSet(flag.id(), updated.get().id(), state.id())));
+        return applyFlagGroup(context, id, world, new FlagTarget(flag, null, flag.id()), group) ? 1 : 0;
+    }
+
+    private int setValueFlag(
+        CommandContext<CommandSourceStack> context,
+        String id,
+        String world,
+        WorldGuardValueFlag flag,
+        String rawValue,
+        GroupTarget group
+    ) {
+        Optional<WorldGuardFlagValue> value = WorldGuardFlagValue.parse(flag, rawValue);
+        if (value.isEmpty()) {
+            context.getSource().sendSystemMessage(error("Invalid value for flag '" + flag.id() + "': " + rawValue));
+            return 0;
+        }
+        Optional<WorldGuardRegion> updated = storage.setValue(id, world, flag, value.get());
+        if (updated.isEmpty()) {
+            noRegion(context, id);
+            return 0;
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.flagSet(flag.id(), updated.get().id(), value.get().serialized())));
+        return applyFlagGroup(context, id, world, new FlagTarget(null, flag, flag.id()), group) ? 1 : 0;
+    }
+
+    private int setFlagGroup(CommandContext<CommandSourceStack> context) {
+        FlagTarget target = flagTarget(context);
+        if (target == null) {
+            return 0;
+        }
+        GroupTarget group = groupTarget(context, target);
+        if (group.invalid()) {
+            return 0;
+        }
+        String id = regionIdForAllowedGlobalCommand(context, getString(context, ID_ARGUMENT));
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        return applyFlagGroup(context, id, world, target, group) ? 1 : 0;
+    }
+
+    private boolean applyFlagGroup(
+        CommandContext<CommandSourceStack> context,
+        String id,
+        String world,
+        FlagTarget target,
+        GroupTarget group
+    ) {
+        if (!group.present()) {
+            return true;
+        }
+        Optional<WorldGuardRegion> updated;
+        if (group.group() == target.defaultGroup()) {
+            updated = setExplicitFlagGroup(id, world, target, null);
+            if (updated.isPresent()) {
+                context.getSource().sendSystemMessage(success("Region group flag for '" + target.id() + "' reset to default."));
+            }
+        } else {
+            updated = setExplicitFlagGroup(id, world, target, group.group());
+            if (updated.isPresent()) {
+                context.getSource().sendSystemMessage(success("Region group flag for '" + target.id() + "' set."));
+            }
+        }
+        if (updated.isEmpty()) {
+            noRegion(context, id);
+            return false;
+        }
+        return true;
+    }
+
+    private Optional<WorldGuardRegion> setExplicitFlagGroup(
+        String id,
+        String world,
+        FlagTarget target,
+        WorldGuardRegionGroup group
+    ) {
+        if (target.stateFlag() != null) {
+            return storage.setFlagGroup(id, world, target.stateFlag(), group);
+        }
+        return storage.setFlagGroup(id, world, target.valueFlag(), group);
+    }
+
+    private void clearFlagGroup(String id, String world, FlagTarget target) {
+        if (!target.supportsRegionGroup()) {
+            return;
+        }
+        if (target.stateFlag() != null) {
+            storage.setFlagGroup(id, world, target.stateFlag(), null);
+        } else {
+            storage.setFlagGroup(id, world, target.valueFlag(), null);
+        }
     }
 
     private int setPriority(CommandContext<CommandSourceStack> context) {
@@ -983,12 +1111,28 @@ public final class WorldGuardCommands {
 
     private RequiredArgumentBuilder<CommandSourceStack, String> flagArguments() {
         return regionArgument()
-            .then(Commands.argument(FLAG_ARGUMENT, StringArgumentType.word())
-                .suggests(this::suggestFlags)
-                .executes(this::clearRegionFlag)
-                .then(Commands.argument(STATE_ARGUMENT, StringArgumentType.word())
-                    .suggests(this::suggestStates)
-                    .executes(this::setFlag)));
+            .then(flagValueArguments());
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> flagValueArguments() {
+        return Commands.argument(FLAG_ARGUMENT, StringArgumentType.word())
+            .suggests(this::suggestFlags)
+            .executes(this::clearRegionFlag)
+            .then(valueArgument().executes(this::setFlag))
+            .then(Commands.literal("-g")
+                .then(groupArgument()
+                    .executes(this::setFlagGroup)
+                    .then(valueArgument().executes(this::setFlag))));
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> valueArgument() {
+        return Commands.argument(VALUE_ARGUMENT, StringArgumentType.greedyString())
+            .suggests(this::suggestFlagValues);
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> groupArgument() {
+        return Commands.argument(GROUP_ARGUMENT, StringArgumentType.word())
+            .suggests(this::suggestGroups);
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, String> setPriorityArguments() {
@@ -1034,11 +1178,31 @@ public final class WorldGuardCommands {
     }
 
     private CompletableFuture<Suggestions> suggestFlags(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
-        return SharedSuggestionProvider.suggest(WorldGuardFlag.ids(), builder);
+        List<String> flags = new java.util.ArrayList<>();
+        WorldGuardFlag.ids().forEach(flags::add);
+        WorldGuardValueFlag.ids().forEach(flags::add);
+        flags.sort(String.CASE_INSENSITIVE_ORDER);
+        return SharedSuggestionProvider.suggest(flags, builder);
     }
 
     private CompletableFuture<Suggestions> suggestStates(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
         return SharedSuggestionProvider.suggest(List.of("allow", "deny", "unset"), builder);
+    }
+
+    private CompletableFuture<Suggestions> suggestFlagValues(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        String rawFlag = optionalStringArgument(context, FLAG_ARGUMENT).orElse("");
+        if (WorldGuardFlag.parse(rawFlag).isPresent()) {
+            return suggestStates(context, builder);
+        }
+        Optional<WorldGuardValueFlag> flag = WorldGuardValueFlag.parse(rawFlag);
+        if (flag.isPresent() && flag.get().type() == WorldGuardFlagType.BOOLEAN) {
+            return SharedSuggestionProvider.suggest(List.of("true", "false", "on", "off"), builder);
+        }
+        return builder.buildFuture();
+    }
+
+    private CompletableFuture<Suggestions> suggestGroups(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(REGION_GROUP_IDS, builder);
     }
 
     private CompletableFuture<Suggestions> suggestBypassStates(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
@@ -1079,7 +1243,11 @@ public final class WorldGuardCommands {
     }
 
     private String regionIdForAllowedGlobalCommand(CommandContext<CommandSourceStack> context) {
-        String id = checkRegionId(context, getString(context, ID_ARGUMENT), true);
+        return regionIdForAllowedGlobalCommand(context, getString(context, ID_ARGUMENT));
+    }
+
+    private String regionIdForAllowedGlobalCommand(CommandContext<CommandSourceStack> context, String rawId) {
+        String id = checkRegionId(context, rawId, true);
         if (id.isBlank()) {
             return "";
         }
@@ -1093,6 +1261,63 @@ public final class WorldGuardCommands {
             return "";
         }
         return id;
+    }
+
+    private FlagTarget flagTarget(CommandContext<CommandSourceStack> context) {
+        String rawFlag = getString(context, FLAG_ARGUMENT);
+        Optional<WorldGuardFlag> stateFlag = WorldGuardFlag.parse(rawFlag);
+        if (stateFlag.isPresent()) {
+            return new FlagTarget(stateFlag.get(), null, stateFlag.get().id());
+        }
+        Optional<WorldGuardValueFlag> valueFlag = WorldGuardValueFlag.parse(rawFlag);
+        if (valueFlag.isPresent()) {
+            return new FlagTarget(null, valueFlag.get(), valueFlag.get().id());
+        }
+        sendUnknownFlag(context, rawFlag);
+        return null;
+    }
+
+    private GroupTarget groupTarget(CommandContext<CommandSourceStack> context, FlagTarget flag) {
+        Optional<String> rawGroup = optionalStringArgument(context, GROUP_ARGUMENT);
+        if (rawGroup.isEmpty()) {
+            return new GroupTarget(false, null, false);
+        }
+        Optional<WorldGuardRegionGroup> group = parseRegionGroup(rawGroup.get());
+        if (group.isEmpty()) {
+            context.getSource().sendSystemMessage(error(
+                "Unknown value '" + rawGroup.get() + "' in com.sk89q.worldguard.protection.flags.RegionGroup"
+            ));
+            return new GroupTarget(true, null, true);
+        }
+        if (!flag.supportsRegionGroup()) {
+            context.getSource().sendSystemMessage(error("Region flag '" + flag.id() + "' does not have a group flag!"));
+            return new GroupTarget(true, null, true);
+        }
+        return new GroupTarget(true, group.get(), false);
+    }
+
+    private Optional<WorldGuardRegionGroup> parseRegionGroup(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        return switch (normalized) {
+            case "members", "member" -> Optional.of(WorldGuardRegionGroup.MEMBERS);
+            case "owners", "owner" -> Optional.of(WorldGuardRegionGroup.OWNERS);
+            case "nonmembers", "nonmember", "non-members", "non-member" -> Optional.of(WorldGuardRegionGroup.NON_MEMBERS);
+            case "nonowners", "nonowner", "non-owners", "non-owner" -> Optional.of(WorldGuardRegionGroup.NON_OWNERS);
+            case "everyone", "anyone", "all" -> Optional.of(WorldGuardRegionGroup.ALL);
+            case "none", "noone", "deny" -> Optional.of(WorldGuardRegionGroup.NONE);
+            default -> WorldGuardRegionGroup.parse(raw);
+        };
+    }
+
+    private Optional<String> optionalStringArgument(CommandContext<CommandSourceStack> context, String argumentName) {
+        try {
+            return Optional.of(getString(context, argumentName));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
     }
 
     private void noRegion(CommandContext<CommandSourceStack> context, String id) {
@@ -1279,5 +1504,18 @@ public final class WorldGuardCommands {
     }
 
     private record DomainArgument(UUID playerUuid, String group) {
+    }
+
+    private record FlagTarget(WorldGuardFlag stateFlag, WorldGuardValueFlag valueFlag, String id) {
+        boolean supportsRegionGroup() {
+            return stateFlag != null ? stateFlag.supportsRegionGroup() : valueFlag.supportsRegionGroup();
+        }
+
+        WorldGuardRegionGroup defaultGroup() {
+            return stateFlag != null ? stateFlag.defaultGroup() : valueFlag.defaultGroup();
+        }
+    }
+
+    private record GroupTarget(boolean present, WorldGuardRegionGroup group, boolean invalid) {
     }
 }

@@ -14,6 +14,8 @@ import net.minecraft.world.entity.MobCategory;
 import com.vantablack4.worldguard.FlagState;
 import com.vantablack4.worldguard.WorldGuardFlag;
 import com.vantablack4.worldguard.WorldGuardRegion;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 final class WorldGuardSessionRulesTests {
     private static final String WORLD = "minecraft:overworld";
@@ -149,6 +151,92 @@ final class WorldGuardSessionRulesTests {
         assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), inside, outside, "Steve"))
             .extracting(WorldGuardSessionMessage::message)
             .containsExactly("Steve left NOTIFY region");
+    }
+
+    @Test
+    void greetingAndFarewellMessagesUseTypedRegionValues() {
+        WorldGuardRegion region = region("spawn", Map.of())
+            .withValue(
+                WorldGuardValueFlag.GREETING,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.GREETING, "Welcome").orElseThrow()
+            )
+            .withValue(
+                WorldGuardValueFlag.FAREWELL,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.FAREWELL, "Goodbye").orElseThrow()
+            );
+        WorldGuardSessionSnapshot outside = WorldGuardSessionRules.snapshot(
+            Set.of(region),
+            WORLD,
+            new BlockPos(-1, 5, 5)
+        );
+        WorldGuardSessionSnapshot inside = WorldGuardSessionRules.snapshot(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 5)
+        );
+
+        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), outside, inside, "Steve"))
+            .extracting(WorldGuardSessionMessage::message)
+            .containsExactly("Welcome");
+        assertThat(WorldGuardSessionRules.messagesForTransition(Set.of(region), inside, outside, "Steve"))
+            .extracting(WorldGuardSessionMessage::message)
+            .containsExactly("Goodbye");
+    }
+
+    @Test
+    void blockedCommandsDenyMatchingCommandPrefixes() {
+        WorldGuardRegion region = region("spawn", Map.of())
+            .withValue(
+                WorldGuardValueFlag.BLOCKED_CMDS,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.BLOCKED_CMDS, "/home,/spawn").orElseThrow()
+            );
+
+        assertThat(WorldGuardSessionRules.commandAllowed(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 5),
+            PLAYER,
+            Set.of(),
+            false,
+            "home base"
+        )).isFalse();
+        assertThat(WorldGuardSessionRules.commandAllowed(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 5),
+            PLAYER,
+            Set.of(),
+            false,
+            "msg Deniz hello"
+        )).isTrue();
+    }
+
+    @Test
+    void allowedCommandsWhitelistMatchingCommandPrefixes() {
+        WorldGuardRegion region = region("spawn", Map.of())
+            .withValue(
+                WorldGuardValueFlag.ALLOWED_CMDS,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.ALLOWED_CMDS, "/spawn").orElseThrow()
+            );
+
+        assertThat(WorldGuardSessionRules.commandAllowed(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 5),
+            PLAYER,
+            Set.of(),
+            false,
+            "spawn"
+        )).isTrue();
+        assertThat(WorldGuardSessionRules.commandAllowed(
+            Set.of(region),
+            WORLD,
+            new BlockPos(1, 5, 5),
+            PLAYER,
+            Set.of(),
+            false,
+            "home"
+        )).isFalse();
     }
 
     @Test

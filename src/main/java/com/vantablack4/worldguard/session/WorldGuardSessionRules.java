@@ -17,6 +17,8 @@ import com.vantablack4.worldguard.ProtectionDecision;
 import com.vantablack4.worldguard.WorldGuardFlag;
 import com.vantablack4.worldguard.WorldGuardPolicy;
 import com.vantablack4.worldguard.WorldGuardRegion;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 import com.vantablack4.worldguard.model.RegionQueryEngine;
 
 public final class WorldGuardSessionRules {
@@ -221,6 +223,17 @@ public final class WorldGuardSessionRules {
         WorldGuardSessionSnapshot current,
         String playerName
     ) {
+        return messagesForTransition(regions, previous, current, playerName, null, List.of());
+    }
+
+    public static List<WorldGuardSessionMessage> messagesForTransition(
+        Collection<WorldGuardRegion> regions,
+        WorldGuardSessionSnapshot previous,
+        WorldGuardSessionSnapshot current,
+        String playerName,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
         if (previous == null || current == null) {
             return List.of();
         }
@@ -248,6 +261,10 @@ public final class WorldGuardSessionRules {
                 name + " left NOTIFY region"
             ));
         }
+        if (leftRegion(previous, current)) {
+            valueAt(regionList, previous, WorldGuardValueFlag.FAREWELL, playerUuid, playerGroups)
+                .ifPresent(message -> messages.add(new WorldGuardSessionMessage(null, "", message.serialized())));
+        }
 
         List<String> entered = new ArrayList<>();
         for (String regionId : current.regionIds()) {
@@ -263,8 +280,55 @@ public final class WorldGuardSessionRules {
                 name + " entered NOTIFY region: " + String.join(", ", entered)
             ));
         }
+        if (enteredRegion(previous, current)) {
+            valueAt(regionList, current, WorldGuardValueFlag.GREETING, playerUuid, playerGroups)
+                .ifPresent(message -> messages.add(new WorldGuardSessionMessage(null, "", message.serialized())));
+        }
 
         return List.copyOf(messages);
+    }
+
+    public static boolean commandAllowed(
+        Collection<WorldGuardRegion> regions,
+        String world,
+        BlockPos pos,
+        UUID playerUuid,
+        Collection<String> playerGroups,
+        boolean bypass,
+        String command
+    ) {
+        if (bypass || world == null || pos == null || command == null || command.isBlank()) {
+            return true;
+        }
+
+        List<WorldGuardRegion> regionList = regionList(regions);
+        RegionQueryEngine.ValueEvaluation blocked = RegionQueryEngine.queryValue(
+            regionList,
+            world,
+            pos.getX(),
+            pos.getY(),
+            pos.getZ(),
+            WorldGuardValueFlag.BLOCKED_CMDS,
+            playerUuid,
+            playerGroups
+        );
+        if (blocked.value().map(WorldGuardFlagValue::asSet).orElse(Set.of()).stream()
+            .anyMatch(rule -> commandMatches(rule, command))) {
+            return false;
+        }
+
+        RegionQueryEngine.ValueEvaluation allowed = RegionQueryEngine.queryValue(
+            regionList,
+            world,
+            pos.getX(),
+            pos.getY(),
+            pos.getZ(),
+            WorldGuardValueFlag.ALLOWED_CMDS,
+            playerUuid,
+            playerGroups
+        );
+        Set<String> allowedCommands = allowed.value().map(WorldGuardFlagValue::asSet).orElse(Set.of());
+        return allowedCommands.isEmpty() || allowedCommands.stream().anyMatch(rule -> commandMatches(rule, command));
     }
 
     private static boolean changedRegions(WorldGuardSessionSnapshot previous, WorldGuardSessionSnapshot current) {
@@ -318,6 +382,43 @@ public final class WorldGuardSessionRules {
             current = current.parentId().isBlank() ? null : byId.get(current.parentId());
         }
         return false;
+    }
+
+    private static Optional<WorldGuardFlagValue> valueAt(
+        List<WorldGuardRegion> regions,
+        WorldGuardSessionSnapshot snapshot,
+        WorldGuardValueFlag flag,
+        UUID playerUuid,
+        Collection<String> playerGroups
+    ) {
+        return RegionQueryEngine.queryValue(
+            regions,
+            snapshot.world(),
+            snapshot.pos().getX(),
+            snapshot.pos().getY(),
+            snapshot.pos().getZ(),
+            flag,
+            playerUuid,
+            playerGroups
+        ).value();
+    }
+
+    static boolean commandMatches(String rule, String command) {
+        String normalizedRule = normalizeCommand(rule);
+        String normalizedCommand = normalizeCommand(command);
+        return !normalizedRule.isBlank()
+            && (normalizedCommand.equals(normalizedRule) || normalizedCommand.startsWith(normalizedRule + " "));
+    }
+
+    private static String normalizeCommand(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String normalized = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.isBlank()) {
+            return "";
+        }
+        return normalized.startsWith("/") ? normalized : "/" + normalized;
     }
 
     private static List<WorldGuardRegion> regionList(Collection<WorldGuardRegion> regions) {

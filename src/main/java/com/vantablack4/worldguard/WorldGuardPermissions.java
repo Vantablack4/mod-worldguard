@@ -27,7 +27,7 @@ final class WorldGuardPermissions {
     }
 
     static boolean bypass(PermissionContextOwner source, WorldGuardConfig config) {
-        return source.checkPermission(BYPASS, PermissionLevel.byId(config.adminPermissionLevel()));
+        return source.checkPermission(BYPASS, false);
     }
 
     static boolean bypass(ServerPlayer player, PermissionContextOwner source, WorldGuardConfig config) {
@@ -36,7 +36,7 @@ final class WorldGuardPermissions {
         }
         return !BYPASS_DISABLED.contains(player.getUUID())
             && (
-                source.checkPermission(BYPASS, PermissionLevel.byId(config.adminPermissionLevel()))
+                source.checkPermission(BYPASS, false)
                     || source.checkPermission(upstreamRegionPermission("bypass"), false)
                     || source.checkPermission(upstreamRegionPermission("bypass." + safePermissionPath(player.level().dimension().identifier().toString())), false)
             );

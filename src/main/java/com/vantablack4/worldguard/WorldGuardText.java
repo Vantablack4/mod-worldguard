@@ -149,6 +149,17 @@ final class WorldGuardText {
         return "Hey! Sorry, but you can't " + action(flag) + " here.";
     }
 
+    static String denyMessage(WorldGuardFlag flag, String template) {
+        return denyMessage(template, action(flag));
+    }
+
+    static String denyMessage(String template, String action) {
+        if (template == null || template.isBlank()) {
+            return "Hey! Sorry, but you can't " + action + " here.";
+        }
+        return template.replace("%what%", action == null || action.isBlank() ? "do that" : action);
+    }
+
     private static String action(WorldGuardFlag flag) {
         if (flag == null) {
             return "do that";

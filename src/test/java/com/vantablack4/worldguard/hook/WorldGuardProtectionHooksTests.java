@@ -157,6 +157,33 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void globalSoilDryDenyBlocksFarmlandDryMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.SOIL_DRY, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardFlag.SOIL_DRY,
+            WorldGuardFlag.MOISTURE_CHANGE
+        )).isTrue();
+    }
+
+    @Test
+    void globalBlockTramplingDenyBlocksPlayerTrampleMutation() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.TRAMPLE_BLOCKS, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardProtectionHooks.trampleFlags(true)
+        )).isTrue();
+    }
+
+    @Test
     void membersDoNotBypassNonPlayerBuildMutation() {
         WorldGuardRegion region = new WorldGuardRegion(
             "home",
