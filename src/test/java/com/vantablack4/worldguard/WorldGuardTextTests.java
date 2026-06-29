@@ -21,6 +21,8 @@ final class WorldGuardTextTests {
             .isEqualTo("You're standing in several regions (please pick one).");
         assertThat(WorldGuardText.createdRegion("spawn"))
             .isEqualTo("A new region has been made named 'spawn'.");
+        assertThat(WorldGuardText.claimedRegion("spawn"))
+            .isEqualTo("A new region has been claimed named 'spawn'.");
         assertThat(WorldGuardText.regionAlreadyExists("spawn"))
             .isEqualTo("A region with that name already exists. Please choose another name."
                 + " To change the shape, use /region redefine spawn.");
@@ -30,6 +32,8 @@ final class WorldGuardTextTests {
             .isEqualTo("Successfully removed spawn.");
         assertThat(WorldGuardText.teleportedToRegion("spawn"))
             .isEqualTo("Teleported you to the 'spawn' region.");
+        assertThat(WorldGuardText.regionSelected("cuboid"))
+            .isEqualTo("Region selected as cuboid");
         assertThat(WorldGuardText.worldNotLoaded("minecraft:missing"))
             .isEqualTo("World 'minecraft:missing' is not loaded.");
         assertThat(WorldGuardText.unknownFlag("badflag"))
@@ -54,6 +58,14 @@ final class WorldGuardTextTests {
             .isEqualTo("Region 'spawn' updated with new owners.");
         assertThat(WorldGuardText.ownersRemoved("spawn"))
             .isEqualTo("Region 'spawn' updated with owners removed.");
+        assertThat(WorldGuardText.listNamesToRemoveOrAll())
+            .isEqualTo("List some names to remove, or use -a to remove all.");
+        assertThat(WorldGuardText.invalidBypassArgument())
+            .isEqualTo("Allowed optional arguments are: on, off");
+        assertThat(WorldGuardText.bypassEnabled())
+            .isEqualTo("You are now bypassing region protection (as long as you have permission).");
+        assertThat(WorldGuardText.bypassDisabled())
+            .isEqualTo("You are no longer bypassing region protection.");
         assertThat(WorldGuardText.configurationReloaded())
             .isEqualTo("WorldGuard configuration reloaded.");
         assertThat(WorldGuardText.regionsLoadedAllWorlds())

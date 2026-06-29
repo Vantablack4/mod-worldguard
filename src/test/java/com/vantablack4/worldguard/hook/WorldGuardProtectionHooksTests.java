@@ -76,6 +76,40 @@ final class WorldGuardProtectionHooksTests {
     }
 
     @Test
+    void itemFrameRotationUsesSpecificFrameFlag() {
+        assertThat(WorldGuardProtectionHooks.isItemFrame(null)).isFalse();
+        assertThat(WorldGuardProtectionHooks.nonLivingDamageFlags(EntityType.ITEM_FRAME, null))
+            .containsExactly(WorldGuardFlag.ENTITY_ITEM_FRAME_DESTROY);
+    }
+
+    @Test
+    void tramplingSeparatesPlayerAndMobFallbackFlags() {
+        assertThat(WorldGuardProtectionHooks.trampleFlags(true))
+            .containsExactly(WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.BUILD);
+        assertThat(WorldGuardProtectionHooks.trampleFlags(false))
+            .containsExactly(WorldGuardFlag.TRAMPLE_BLOCKS, WorldGuardFlag.MOB_GRIEF);
+    }
+
+    @Test
+    void redstoneAndPortalTriggersUseWorldGuardInteractionFlags() {
+        assertThat(WorldGuardProtectionHooks.redstoneTriggerFlags())
+            .containsExactly(WorldGuardFlag.INTERACT, WorldGuardFlag.USE);
+        assertThat(WorldGuardProtectionHooks.portalEntryFlags())
+            .containsExactly(WorldGuardFlag.EXIT_VIA_TELEPORT, WorldGuardFlag.EXIT);
+    }
+
+    @Test
+    void spreadingSnowyBlocksMapToGrassOrMyceliumFlags() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+
+        assertThat(WorldGuardProtectionHooks.spreadingSnowyFlag(Blocks.GRASS_BLOCK.defaultBlockState()))
+            .isEqualTo(WorldGuardFlag.GRASS_SPREAD);
+        assertThat(WorldGuardProtectionHooks.spreadingSnowyFlag(Blocks.MYCELIUM.defaultBlockState()))
+            .isEqualTo(WorldGuardFlag.MYCELIUM_SPREAD);
+    }
+
+    @Test
     void nonPlayerBuildMutationHonorsBuildDeny() {
         WorldGuardRegion region = new WorldGuardRegion(
             "spawn",

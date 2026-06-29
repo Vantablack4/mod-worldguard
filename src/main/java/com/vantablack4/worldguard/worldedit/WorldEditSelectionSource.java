@@ -1,6 +1,7 @@
 package com.vantablack4.worldguard.worldedit;
 
 import com.vantablack4.worldguard.VantablackWorldGuardMod;
+import com.vantablack4.worldguard.WorldGuardRegion;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,6 +10,8 @@ public interface WorldEditSelectionSource {
     String WORLD_EDIT_MOD_ID = "worldedit";
 
     WorldEditSelectionResult selection(ServerPlayer player);
+
+    WorldEditSelectionWriteResult selectRegion(ServerPlayer player, WorldGuardRegion region);
 
     String description();
 

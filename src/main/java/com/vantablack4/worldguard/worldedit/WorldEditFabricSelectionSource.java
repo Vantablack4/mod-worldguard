@@ -8,12 +8,21 @@ import com.sk89q.worldedit.math.BlockVector2;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Region;
+import com.sk89q.worldedit.regions.RegionSelector;
+import com.sk89q.worldedit.regions.selector.CuboidRegionSelector;
+import com.sk89q.worldedit.regions.selector.Polygonal2DRegionSelector;
 import com.sk89q.worldedit.world.World;
 import com.vantablack4.worldguard.VantablackWorldGuardMod;
+import com.vantablack4.worldguard.WorldGuardRegion;
 import com.vantablack4.worldguard.WorldGuardRegion.PolygonPoint;
+import com.vantablack4.worldguard.model.RegionType;
 
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +49,31 @@ final class WorldEditFabricSelectionSource implements WorldEditSelectionSource {
         } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
             VantablackWorldGuardMod.LOGGER.warn("Unable to read WorldEdit selection", exception);
             return WorldEditSelectionResult.failed("WorldEdit selection could not be read. Check the server log.");
+        }
+    }
+
+    @Override
+    public WorldEditSelectionWriteResult selectRegion(ServerPlayer player, WorldGuardRegion region) {
+        if (region == null || region.global()) {
+            return WorldEditSelectionWriteResult.failed("Cannot select global region.");
+        }
+        try {
+            FabricAdapter adapter = FabricAdapter.get();
+            ServerLevel nativeWorld = nativeWorld(player, region.world());
+            if (nativeWorld == null) {
+                return WorldEditSelectionWriteResult.failed("World '" + region.world() + "' is not loaded.");
+            }
+
+            com.sk89q.worldedit.entity.Player worldEditPlayer = adapter.fromNativePlayer(player);
+            World world = adapter.fromNativeWorld(nativeWorld);
+            LocalSession session = WorldEdit.getInstance().getSessionManager().get(worldEditPlayer);
+            RegionSelector selector = selector(region, world);
+            session.setRegionSelector(world, selector);
+            selector.explainRegionAdjust(worldEditPlayer, session);
+            return WorldEditSelectionWriteResult.success(selector.getTypeName());
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) {
+            VantablackWorldGuardMod.LOGGER.warn("Unable to set WorldEdit selection", exception);
+            return WorldEditSelectionWriteResult.failed("WorldEdit selection could not be set. Check the server log.");
         }
     }
 
@@ -109,5 +143,28 @@ final class WorldEditFabricSelectionSource implements WorldEditSelectionSource {
         } catch (ClassNotFoundException | LinkageError exception) {
             return false;
         }
+    }
+
+    private static ServerLevel nativeWorld(ServerPlayer player, String worldId) {
+        Identifier identifier = Identifier.tryParse(worldId);
+        if (identifier == null) {
+            return null;
+        }
+        ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, identifier);
+        return player.level().getServer().getLevel(key);
+    }
+
+    private static RegionSelector selector(WorldGuardRegion region, World world) throws ReflectiveOperationException {
+        if (region.type() == RegionType.POLYGON) {
+            List<BlockVector2> points = region.polygonPoints().stream()
+                .map(point -> BlockVector2.at(point.x(), point.z()))
+                .toList();
+            return new Polygonal2DRegionSelector(world, points, region.minY(), region.maxY());
+        }
+        return new CuboidRegionSelector(
+            world,
+            BlockVector3.at(region.minX(), region.minY(), region.minZ()),
+            BlockVector3.at(region.maxX(), region.maxY(), region.maxZ())
+        );
     }
 }

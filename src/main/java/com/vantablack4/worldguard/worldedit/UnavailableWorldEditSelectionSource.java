@@ -1,5 +1,7 @@
 package com.vantablack4.worldguard.worldedit;
 
+import com.vantablack4.worldguard.WorldGuardRegion;
+
 import net.minecraft.server.level.ServerPlayer;
 
 final class UnavailableWorldEditSelectionSource implements WorldEditSelectionSource {
@@ -14,6 +16,11 @@ final class UnavailableWorldEditSelectionSource implements WorldEditSelectionSou
     @Override
     public WorldEditSelectionResult selection(ServerPlayer player) {
         return WorldEditSelectionResult.unavailable(message);
+    }
+
+    @Override
+    public WorldEditSelectionWriteResult selectRegion(ServerPlayer player, WorldGuardRegion region) {
+        return WorldEditSelectionWriteResult.unavailable(message);
     }
 
     @Override

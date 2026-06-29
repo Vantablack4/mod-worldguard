@@ -4,16 +4,20 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import net.fabricmc.fabric.api.permission.v1.PermissionContextOwner;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
 
 final class WorldGuardPermissions {
     static final Identifier ADMIN = Identifier.fromNamespaceAndPath(VantablackWorldGuardMod.MOD_ID, "admin");
     static final Identifier BYPASS = Identifier.fromNamespaceAndPath(VantablackWorldGuardMod.MOD_ID, "bypass");
     private static final Pattern UNSAFE_PERMISSION_PATH = Pattern.compile("[^a-z0-9/._-]");
+    private static final Set<UUID> BYPASS_DISABLED = ConcurrentHashMap.newKeySet();
 
     private WorldGuardPermissions() {
     }
@@ -24,6 +28,41 @@ final class WorldGuardPermissions {
 
     static boolean bypass(PermissionContextOwner source, WorldGuardConfig config) {
         return source.checkPermission(BYPASS, PermissionLevel.byId(config.adminPermissionLevel()));
+    }
+
+    static boolean bypass(ServerPlayer player, PermissionContextOwner source, WorldGuardConfig config) {
+        if (player == null || source == null) {
+            return false;
+        }
+        return !BYPASS_DISABLED.contains(player.getUUID())
+            && (
+                source.checkPermission(BYPASS, PermissionLevel.byId(config.adminPermissionLevel()))
+                    || source.checkPermission(upstreamRegionPermission("bypass"), false)
+                    || source.checkPermission(upstreamRegionPermission("bypass." + safePermissionPath(player.level().dimension().identifier().toString())), false)
+            );
+    }
+
+    static boolean regionCommand(PermissionContextOwner source, WorldGuardConfig config, String command) {
+        return source.checkPermission(upstreamRegionPermission(command), false) || admin(source, config);
+    }
+
+    static boolean toggleBypassPermission(PermissionContextOwner source, WorldGuardConfig config) {
+        return source.checkPermission(upstreamRegionPermission("toggle-bypass"), false) || admin(source, config);
+    }
+
+    static boolean hasBypassDisabled(UUID playerUuid) {
+        return playerUuid != null && BYPASS_DISABLED.contains(playerUuid);
+    }
+
+    static void setBypassDisabled(UUID playerUuid, boolean disabled) {
+        if (playerUuid == null) {
+            return;
+        }
+        if (disabled) {
+            BYPASS_DISABLED.add(playerUuid);
+        } else {
+            BYPASS_DISABLED.remove(playerUuid);
+        }
     }
 
     static Set<String> regionGroups(PermissionContextOwner source, Collection<WorldGuardRegion> regions) {
@@ -53,8 +92,16 @@ final class WorldGuardPermissions {
     private static Identifier regionGroupPermission(String group) {
         return Identifier.fromNamespaceAndPath(
             VantablackWorldGuardMod.MOD_ID,
-            "region.group." + UNSAFE_PERMISSION_PATH.matcher(group).replaceAll("_")
+            "region.group." + safePermissionPath(group)
         );
+    }
+
+    private static Identifier upstreamRegionPermission(String path) {
+        return Identifier.fromNamespaceAndPath("worldguard", "region." + safePermissionPath(path));
+    }
+
+    private static String safePermissionPath(String path) {
+        return UNSAFE_PERMISSION_PATH.matcher(path.toLowerCase(Locale.ROOT)).replaceAll("_");
     }
 
     private static String normalizeGroup(String group) {

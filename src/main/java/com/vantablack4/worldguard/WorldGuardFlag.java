@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.Optional;
 
 import com.vantablack4.worldguard.flag.WorldGuardFlagDefinition;
+import com.vantablack4.worldguard.flag.WorldGuardFlagType;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
 
 public enum WorldGuardFlag {
     PASSTHROUGH(definition("passthrough", FlagState.UNSET, false, false, false)),
@@ -29,6 +31,7 @@ public enum WorldGuardFlag {
     FIREWORK_DAMAGE(memberBypass("firework-damage")),
     USE_ANVIL(memberBypass("use-anvil")),
     USE_DRIPLEAF(memberBypass("use-dripleaf")),
+    WIND_CHARGE_BURST(memberBypass("wind-charge-burst")),
     ITEM_PICKUP(allowDefault("item-pickup")),
     ITEM_DROP(allowDefault("item-drop")),
     EXP_DROPS(allowDefault("exp-drops")),
@@ -76,8 +79,8 @@ public enum WorldGuardFlag {
     FALL_DAMAGE(allowDefault("fall-damage")),
     HEALTH_REGEN(allowDefault("natural-health-regen")),
     HUNGER_DRAIN(allowDefault("natural-hunger-drain")),
-    ENTRY(allowDefault("entry")),
-    EXIT(allowDefault("exit")),
+    ENTRY(allowDefault("entry", WorldGuardRegionGroup.NON_MEMBERS)),
+    EXIT(allowDefault("exit", WorldGuardRegionGroup.NON_MEMBERS)),
     EXIT_VIA_TELEPORT(allowDefault("exit-via-teleport")),
     ENDERPEARL(allowDefault("enderpearl")),
     CHORUS_TELEPORT(allowDefault("chorus-fruit-teleport")),
@@ -110,6 +113,14 @@ public enum WorldGuardFlag {
         return definition.preventsAllowOnGlobal();
     }
 
+    public WorldGuardRegionGroup defaultGroup() {
+        return definition.defaultGroup();
+    }
+
+    public boolean supportsRegionGroup() {
+        return definition.supportsRegionGroup();
+    }
+
     public static Optional<WorldGuardFlag> parse(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
@@ -134,6 +145,10 @@ public enum WorldGuardFlag {
         return definition(id, FlagState.ALLOW, false, false, false, aliases);
     }
 
+    private static WorldGuardFlagDefinition allowDefault(String id, WorldGuardRegionGroup defaultGroup, String... aliases) {
+        return definition(id, FlagState.ALLOW, false, false, false, defaultGroup, aliases);
+    }
+
     private static WorldGuardFlagDefinition definition(
         String id,
         FlagState defaultState,
@@ -142,12 +157,36 @@ public enum WorldGuardFlag {
         boolean preventsAllowOnGlobal,
         String... aliases
     ) {
-        return new WorldGuardFlagDefinition(
+        return definition(
             id,
             defaultState,
             usesMembershipDefault,
             bypassesMemberDeny,
             preventsAllowOnGlobal,
+            WorldGuardRegionGroup.ALL,
+            aliases
+        );
+    }
+
+    private static WorldGuardFlagDefinition definition(
+        String id,
+        FlagState defaultState,
+        boolean usesMembershipDefault,
+        boolean bypassesMemberDeny,
+        boolean preventsAllowOnGlobal,
+        WorldGuardRegionGroup defaultGroup,
+        String... aliases
+    ) {
+        return new WorldGuardFlagDefinition(
+            id,
+            WorldGuardFlagType.STATE,
+            defaultState,
+            usesMembershipDefault,
+            bypassesMemberDeny,
+            preventsAllowOnGlobal,
+            defaultGroup,
+            true,
+            "",
             aliases
         );
     }

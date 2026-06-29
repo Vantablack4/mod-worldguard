@@ -8,6 +8,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.vantablack4.worldguard.WorldGuardRegion.PolygonPoint;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 import com.vantablack4.worldguard.model.RegionType;
 
 import org.junit.jupiter.api.Test;
@@ -164,15 +167,17 @@ final class WorldGuardStorageTests {
         storage.addMemberGroup("town", "minecraft:overworld", "group:Resident");
         storage.addMemberGroup("town", "minecraft:the_nether", "visitor");
         storage.removeMemberGroup("town", "minecraft:overworld", "resident");
+        storage.clearOwners("town", "minecraft:overworld");
+        storage.clearMembers("town", "minecraft:the_nether");
 
         WorldGuardStorage reloaded = WorldGuardStorage.load(tempDir);
 
         WorldGuardRegion overworld = reloaded.find("town", "minecraft:overworld").orElseThrow();
         WorldGuardRegion nether = reloaded.find("town", "minecraft:the_nether").orElseThrow();
-        assertThat(overworld.ownerGroups()).containsExactly("mayor");
+        assertThat(overworld.ownerGroups()).isEmpty();
         assertThat(overworld.memberGroups()).isEmpty();
         assertThat(nether.ownerGroups()).isEmpty();
-        assertThat(nether.memberGroups()).containsExactly("visitor");
+        assertThat(nether.memberGroups()).isEmpty();
     }
 
     @Test
@@ -259,5 +264,50 @@ final class WorldGuardStorageTests {
         assertThat(region.members()).isEmpty();
         assertThat(region.type()).isEqualTo(RegionType.CUBOID);
         assertThat(region.flag(WorldGuardFlag.BUILD)).isEqualTo(FlagState.DENY);
+    }
+
+    @Test
+    void roundTripsTypedValuesAndFlagGroups() throws IOException {
+        WorldGuardFlagValue blockedCommands = WorldGuardFlagValue.parse(
+            WorldGuardValueFlag.BLOCKED_CMDS,
+            "/spawn,/home"
+        ).orElseThrow();
+        WorldGuardFlagValue teleport = WorldGuardFlagValue.location(
+            "minecraft:overworld",
+            10.5D,
+            64D,
+            -2.25D,
+            90F,
+            12.5F
+        ).orElseThrow();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            1,
+            Set.of(),
+            Map.of(WorldGuardFlag.ENTRY, FlagState.DENY)
+        ).withValue(WorldGuardValueFlag.BLOCKED_CMDS, blockedCommands)
+            .withValue(WorldGuardValueFlag.TELEPORT, teleport)
+            .withFlagGroup(WorldGuardFlag.ENTRY, WorldGuardRegionGroup.MEMBERS)
+            .withFlagGroup(WorldGuardValueFlag.TELEPORT, WorldGuardRegionGroup.OWNERS));
+
+        WorldGuardRegion reloaded = WorldGuardStorage.load(tempDir).find("spawn").orElseThrow();
+        String stored = Files.readString(tempDir.resolve("regions.properties"));
+
+        assertThat(reloaded.value(WorldGuardValueFlag.BLOCKED_CMDS)).contains(blockedCommands);
+        assertThat(reloaded.value(WorldGuardValueFlag.TELEPORT)).contains(teleport);
+        assertThat(reloaded.flagGroup(WorldGuardFlag.ENTRY)).isEqualTo(WorldGuardRegionGroup.MEMBERS);
+        assertThat(reloaded.flagGroup(WorldGuardValueFlag.TELEPORT)).isEqualTo(WorldGuardRegionGroup.OWNERS);
+        assertThat(stored).contains(".flag.blocked-cmds=/home,/spawn");
+        assertThat(stored).contains(".flag.teleport=minecraft\\:overworld,10.5,64.0,-2.25,90.0,12.5");
+        assertThat(stored).contains(".flag.entry-group=members");
+        assertThat(stored).contains(".flag.teleport-group=owners");
     }
 }

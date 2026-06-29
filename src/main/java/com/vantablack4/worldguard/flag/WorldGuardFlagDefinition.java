@@ -4,10 +4,14 @@ import com.vantablack4.worldguard.FlagState;
 
 public record WorldGuardFlagDefinition(
     String id,
+    WorldGuardFlagType type,
     FlagState defaultState,
     boolean usesMembershipDefault,
     boolean bypassesMemberDeny,
     boolean preventsAllowOnGlobal,
+    WorldGuardRegionGroup defaultGroup,
+    boolean supportsRegionGroup,
+    String defaultValue,
     String... aliases
 ) {
     public WorldGuardFlagDefinition {
@@ -15,6 +19,9 @@ public record WorldGuardFlagDefinition(
             throw new IllegalArgumentException("Flag id is required");
         }
         id = normalize(id);
+        type = type == null ? WorldGuardFlagType.STATE : type;
+        defaultGroup = defaultGroup == null ? WorldGuardRegionGroup.ALL : defaultGroup;
+        defaultValue = defaultValue == null ? "" : defaultValue;
         aliases = aliases == null ? new String[0] : aliases.clone();
         for (int index = 0; index < aliases.length; index++) {
             aliases[index] = normalize(aliases[index]);
@@ -26,8 +33,11 @@ public record WorldGuardFlagDefinition(
         if (id.equals(normalized)) {
             return true;
         }
+        if (compact(id).equals(compact(normalized))) {
+            return true;
+        }
         for (String alias : aliases) {
-            if (alias.equals(normalized)) {
+            if (alias.equals(normalized) || compact(alias).equals(compact(normalized))) {
                 return true;
             }
         }
@@ -39,5 +49,9 @@ public record WorldGuardFlagDefinition(
             return "";
         }
         return raw.trim().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+    }
+
+    public static String compact(String raw) {
+        return normalize(raw).replace("-", "");
     }
 }

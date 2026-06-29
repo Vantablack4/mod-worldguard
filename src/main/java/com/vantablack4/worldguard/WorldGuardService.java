@@ -84,7 +84,7 @@ public final class WorldGuardService {
     }
 
     public boolean isAdmin(ServerPlayer player) {
-        return WorldGuardPermissions.bypass(player.createCommandSourceStack(), config);
+        return WorldGuardPermissions.bypass(player, player.createCommandSourceStack(), config);
     }
 
     private void sendDenyMessage(ServerPlayer player, ProtectionDecision decision) {

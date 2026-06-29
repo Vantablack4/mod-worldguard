@@ -49,6 +49,9 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("d")).isNotNull();
             assertThat(root.getChild("create")).isNotNull();
             assertThat(root.getChild("claim")).isNotNull();
+            assertThat(root.getChild("select")).isNotNull();
+            assertThat(root.getChild("sel")).isNotNull();
+            assertThat(root.getChild("s")).isNotNull();
             assertThat(root.getChild("redefine")).isNotNull();
             assertThat(root.getChild("update")).isNotNull();
             assertThat(root.getChild("move")).isNotNull();
@@ -75,6 +78,8 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("remmember")).isNotNull();
             assertThat(root.getChild("remmem")).isNotNull();
             assertThat(root.getChild("rm")).isNotNull();
+            assertThat(root.getChild("toggle-bypass")).isNotNull();
+            assertThat(root.getChild("bypass")).isNotNull();
             assertThat(root.getChild("owner")).isNull();
             assertThat(root.getChild("member")).isNull();
         }
@@ -98,12 +103,19 @@ final class WorldGuardCommandsTests {
         for (String alias : List.of(
             "addowner",
             "ao",
+            "addmember",
+            "addmem",
+            "am"
+        )) {
+            assertThat(rg.getChild(alias).getChild("region").getChild("domain"))
+                .as(alias)
+                .isNotNull();
+        }
+
+        for (String alias : List.of(
             "removeowner",
             "remowner",
             "ro",
-            "addmember",
-            "addmem",
-            "am",
             "removemember",
             "removemem",
             "remmember",
@@ -112,6 +124,9 @@ final class WorldGuardCommandsTests {
         )) {
             assertThat(rg.getChild(alias).getChild("region").getChild("domain"))
                 .as(alias)
+                .isNotNull();
+            assertThat(rg.getChild(alias).getChild("region").getChild("-a"))
+                .as(alias + " -a")
                 .isNotNull();
         }
     }
@@ -130,6 +145,16 @@ final class WorldGuardCommandsTests {
             @Override
             public WorldEditSelectionResult selection(ServerPlayer player) {
                 return WorldEditSelectionResult.unavailable("WorldEdit unavailable in tests.");
+            }
+
+            @Override
+            public com.vantablack4.worldguard.worldedit.WorldEditSelectionWriteResult selectRegion(
+                ServerPlayer player,
+                WorldGuardRegion region
+            ) {
+                return com.vantablack4.worldguard.worldedit.WorldEditSelectionWriteResult.unavailable(
+                    "WorldEdit unavailable in tests."
+                );
             }
 
             @Override

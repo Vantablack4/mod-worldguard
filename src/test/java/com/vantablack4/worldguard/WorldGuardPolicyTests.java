@@ -7,6 +7,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
+import com.vantablack4.worldguard.model.RegionQueryEngine;
 import org.junit.jupiter.api.Test;
 
 final class WorldGuardPolicyTests {
@@ -491,5 +495,189 @@ final class WorldGuardPolicyTests {
         assertThat(memberDecision.allowed()).isTrue();
         assertThat(outsiderDecision.allowed()).isFalse();
         assertThat(outsiderDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
+    void fuzzyFlagNamesMatchUpstreamStyleAliases() {
+        assertThat(WorldGuardFlag.parse("blockplace")).contains(WorldGuardFlag.BLOCK_PLACE);
+        assertThat(WorldGuardFlag.parse("block_place")).contains(WorldGuardFlag.BLOCK_PLACE);
+        assertThat(WorldGuardValueFlag.parse("denyspawn")).contains(WorldGuardValueFlag.DENY_SPAWN);
+    }
+
+    @Test
+    void entryAndExitApplyToNonMembersByDefault() {
+        UUID member = UUID.randomUUID();
+        UUID outsider = UUID.randomUUID();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(member),
+            Map.of(WorldGuardFlag.ENTRY, FlagState.DENY, WorldGuardFlag.EXIT, FlagState.DENY)
+        );
+
+        ProtectionDecision memberEntry = WorldGuardPolicy.evaluate(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardFlag.ENTRY,
+            member,
+            false
+        );
+        ProtectionDecision outsiderEntry = WorldGuardPolicy.evaluate(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardFlag.ENTRY,
+            outsider,
+            false
+        );
+
+        assertThat(memberEntry.allowed()).isTrue();
+        assertThat(outsiderEntry.allowed()).isFalse();
+    }
+
+    @Test
+    void explicitFlagGroupCanApplyEntryToMembers() {
+        UUID member = UUID.randomUUID();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(member),
+            Map.of(WorldGuardFlag.ENTRY, FlagState.DENY)
+        ).withFlagGroup(WorldGuardFlag.ENTRY, WorldGuardRegionGroup.ALL);
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardFlag.ENTRY,
+            member,
+            false
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.regionId()).isEqualTo("spawn");
+    }
+
+    @Test
+    void typedValuesInheritFromParentsAndOverrideGlobalValues() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withValue(
+                WorldGuardValueFlag.GREETING,
+                WorldGuardFlagValue.parse(WorldGuardValueFlag.GREETING, "Global").orElseThrow()
+            );
+        WorldGuardRegion parent = new WorldGuardRegion(
+            "town",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            20,
+            20,
+            20,
+            1,
+            Set.of(),
+            Map.of()
+        ).withValue(
+            WorldGuardValueFlag.GREETING,
+            WorldGuardFlagValue.parse(WorldGuardValueFlag.GREETING, "Town").orElseThrow()
+        );
+        WorldGuardRegion child = new WorldGuardRegion(
+            "plot",
+            "minecraft:overworld",
+            1,
+            1,
+            1,
+            3,
+            3,
+            3,
+            1,
+            "town",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        );
+
+        RegionQueryEngine.ValueEvaluation evaluation = RegionQueryEngine.queryValue(
+            List.of(global, parent, child),
+            "minecraft:overworld",
+            2,
+            2,
+            2,
+            WorldGuardValueFlag.GREETING,
+            UUID.randomUUID()
+        );
+
+        assertThat(evaluation.value()).contains(WorldGuardFlagValue.parse(WorldGuardValueFlag.GREETING, "Town").orElseThrow());
+        assertThat(evaluation.regionId()).isEqualTo("plot");
+        assertThat(evaluation.sourceRegionId()).isEqualTo("town");
+    }
+
+    @Test
+    void typedValueFlagGroupsUseRegionAssociation() {
+        UUID owner = UUID.randomUUID();
+        UUID outsider = UUID.randomUUID();
+        WorldGuardFlagValue spawn = WorldGuardFlagValue.location("minecraft:overworld", 1, 2, 3, 4, 5).orElseThrow();
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            "",
+            com.vantablack4.worldguard.model.RegionType.CUBOID,
+            Set.of(owner),
+            Set.of(),
+            Set.of(),
+            Set.of(),
+            Map.of()
+        ).withValue(WorldGuardValueFlag.SPAWN, spawn)
+            .withFlagGroup(WorldGuardValueFlag.SPAWN, WorldGuardRegionGroup.OWNERS);
+
+        assertThat(RegionQueryEngine.queryValue(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardValueFlag.SPAWN,
+            owner
+        ).value()).contains(spawn);
+        assertThat(RegionQueryEngine.queryValue(
+            List.of(region),
+            "minecraft:overworld",
+            5,
+            5,
+            5,
+            WorldGuardValueFlag.SPAWN,
+            outsider
+        ).value()).isEmpty();
     }
 }

@@ -21,17 +21,21 @@ and server-event behavior needed by the Vantablack server.
 
 - Server-only Fabric mod metadata.
 - Cuboid, polygonal 2D, and global region model with per-dimension bounds.
-- Region priority, owners, members, owner/member groups, parent inheritance, and explicit
-  allow/deny/unset flags.
+- Region priority, owners, members, owner/member groups, parent inheritance,
+  explicit allow/deny/unset flags, per-flag region groups, and typed non-state
+  flag storage.
 - Local `regions.properties` persistence with schema versioning.
 - `/wg`, `/worldguard`, `/region`, and `/rg` admin commands.
-- Optional WorldEdit Fabric import for cuboid and polygonal selections.
+- Optional WorldEdit Fabric import and export for cuboid and polygonal
+  selections.
 - Fabric event hooks for block break, block attack, block use/place attempts,
   item use, bucket place/pickup internals, chest/container access on blocks and
   entities, entity use, entity attack, non-player entity damage, mob spawning,
   explosions, fire, fluids, pistons, practical Enderman/Ravager grief,
-  movement entry/exit, teleport entry/exit, ender pearl and chorus use, chat
-  send, sleep, PvP, fall damage, invincibility, item drop, and item pickup.
+  movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
+  use, chat send, sleep, PvP, fall damage, invincibility, item drop, item
+  pickup, item frame rotation, trampling, redstone triggers, hoppers, lightning,
+  snow/ice weather, melt, growth, spread, decay, and fade mutations.
 
 ## Next Parity Work
 
@@ -42,13 +46,14 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Replace the Fabric-native group-permission bridge with direct LuckPerms group
   lookup if Vantablack adopts LuckPerms as a hard dependency.
 - Add recipient filtering for `receive-chat`.
-- Add remaining environmental hooks for portals, crop trampling,
-  lightning/weather, growth/decay, hoppers, pressure plates, and dragon/wither
-  non-explosion block damage.
+- Add remaining environmental hooks for sapling/tree feature growth and
+  dragon/wither non-explosion block damage.
 - Continue command parity work for upstream flags/options that Brigadier does
-  not expose yet: `-w`, `-g`, `-n`, `-a`, list paging/filtering, `/rg select`,
-  and `/rg toggle-bypass`.
-- Add typed non-state flags and message-bearing greeting/farewell equivalents.
+  not expose yet: `-w`, `-g`, `-n`, typed `/rg flag` values, and list
+  paging/filtering.
+- Wire typed non-state flags into runtime behavior for greeting/farewell,
+  heal/feed, weather/time lock, game mode, command allow/block lists, and
+  teleport/spawn values.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
 

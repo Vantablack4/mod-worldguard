@@ -2,6 +2,9 @@ package com.vantablack4.worldguard;
 
 import com.vantablack4.worldguard.model.RegionQueryEngine;
 import com.vantablack4.worldguard.model.RegionType;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 import com.vantablack4.worldguard.storage.RegionStorageSchema;
 
 import java.io.IOException;
@@ -18,9 +21,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -163,6 +168,71 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> setValue(String rawId, WorldGuardValueFlag flag, WorldGuardFlagValue value) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withValue(flag, value));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setValue(
+        String rawId,
+        String world,
+        WorldGuardValueFlag flag,
+        WorldGuardFlagValue value
+    ) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withValue(flag, value));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setFlagGroup(
+        String rawId,
+        WorldGuardFlag flag,
+        WorldGuardRegionGroup group
+    ) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlagGroup(flag, group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setFlagGroup(
+        String rawId,
+        String world,
+        WorldGuardFlag flag,
+        WorldGuardRegionGroup group
+    ) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlagGroup(flag, group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setFlagGroup(
+        String rawId,
+        WorldGuardValueFlag flag,
+        WorldGuardRegionGroup group
+    ) {
+        Optional<WorldGuardRegion> existing = find(rawId);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlagGroup(flag, group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> setFlagGroup(
+        String rawId,
+        String world,
+        WorldGuardValueFlag flag,
+        WorldGuardRegionGroup group
+    ) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(region -> region.withFlagGroup(flag, group));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
     public synchronized Optional<WorldGuardRegion> setParent(String rawId, String rawParentId) {
         String parentId = normalizeId(rawParentId);
         if (!parentId.isBlank() && find(parentId).isEmpty()) {
@@ -224,6 +294,13 @@ public final class WorldGuardStorage {
         return updated;
     }
 
+    public synchronized Optional<WorldGuardRegion> clearOwners(String rawId, String world) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(WorldGuardRegion::withoutOwners);
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
     public synchronized Optional<WorldGuardRegion> addOwnerGroup(String rawId, String group) {
         Optional<WorldGuardRegion> existing = find(rawId);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withOwnerGroup(group));
@@ -276,6 +353,13 @@ public final class WorldGuardStorage {
     public synchronized Optional<WorldGuardRegion> removeMember(String rawId, String world, UUID playerUuid) {
         Optional<WorldGuardRegion> existing = find(rawId, world);
         Optional<WorldGuardRegion> updated = existing.map(region -> region.withoutMember(playerUuid));
+        updated.ifPresent(this::save);
+        return updated;
+    }
+
+    public synchronized Optional<WorldGuardRegion> clearMembers(String rawId, String world) {
+        Optional<WorldGuardRegion> existing = find(rawId, world);
+        Optional<WorldGuardRegion> updated = existing.map(WorldGuardRegion::withoutMembers);
         updated.ifPresent(this::save);
         return updated;
     }
@@ -358,6 +442,8 @@ public final class WorldGuardStorage {
         world = normalizeWorld(world);
         try {
             EnumMap<WorldGuardFlag, FlagState> flags = parseFlags(prefix);
+            EnumMap<WorldGuardValueFlag, WorldGuardFlagValue> valueFlags = parseValueFlags(prefix);
+            Map<String, WorldGuardRegionGroup> flagGroups = parseFlagGroups(prefix);
             RegionType type = RegionType.parse(properties.getProperty(prefix + "type")).orElse(RegionType.CUBOID);
             if (id.equals(WorldGuardRegion.GLOBAL_REGION_ID)) {
                 type = RegionType.GLOBAL;
@@ -383,6 +469,8 @@ public final class WorldGuardStorage {
                 parseStringSet(properties.getProperty(prefix + "owner-groups")),
                 parseStringSet(properties.getProperty(prefix + "member-groups")),
                 flags,
+                valueFlags,
+                flagGroups,
                 polygonPoints
             ));
         } catch (RuntimeException exception) {
@@ -399,6 +487,34 @@ public final class WorldGuardStorage {
                 .ifPresent(state -> flags.put(flag, state));
         }
         return flags;
+    }
+
+    private EnumMap<WorldGuardValueFlag, WorldGuardFlagValue> parseValueFlags(String prefix) {
+        EnumMap<WorldGuardValueFlag, WorldGuardFlagValue> valueFlags = new EnumMap<>(WorldGuardValueFlag.class);
+        for (WorldGuardValueFlag flag : WorldGuardValueFlag.values()) {
+            WorldGuardFlagValue.parse(flag, properties.getProperty(prefix + "flag." + flag.id()))
+                .ifPresent(value -> valueFlags.put(flag, value));
+        }
+        return valueFlags;
+    }
+
+    private Map<String, WorldGuardRegionGroup> parseFlagGroups(String prefix) {
+        HashMap<String, WorldGuardRegionGroup> groups = new HashMap<>();
+        for (WorldGuardFlag flag : WorldGuardFlag.values()) {
+            if (flag.supportsRegionGroup()) {
+                parseFlagGroup(prefix, flag.id()).ifPresent(group -> groups.put(flag.id(), group));
+            }
+        }
+        for (WorldGuardValueFlag flag : WorldGuardValueFlag.values()) {
+            if (flag.supportsRegionGroup()) {
+                parseFlagGroup(prefix, flag.id()).ifPresent(group -> groups.put(flag.id(), group));
+            }
+        }
+        return groups;
+    }
+
+    private Optional<WorldGuardRegionGroup> parseFlagGroup(String prefix, String flagId) {
+        return WorldGuardRegionGroup.parse(properties.getProperty(prefix + "flag." + flagId + "-group"));
     }
 
     private void writeRegion(WorldGuardRegion region) {
@@ -438,6 +554,30 @@ public final class WorldGuardStorage {
             } else {
                 properties.setProperty(prefix + "flag." + flag.id(), state.id());
             }
+            writeFlagGroup(prefix, flag.id(), flag.supportsRegionGroup(), region.explicitFlagGroup(flag.id()).orElse(null));
+        }
+        for (WorldGuardValueFlag flag : WorldGuardValueFlag.values()) {
+            Optional<WorldGuardFlagValue> value = region.value(flag);
+            if (value.isPresent()) {
+                properties.setProperty(prefix + "flag." + flag.id(), value.get().serialized());
+            } else {
+                properties.remove(prefix + "flag." + flag.id());
+            }
+            writeFlagGroup(prefix, flag.id(), flag.supportsRegionGroup(), region.explicitFlagGroup(flag.id()).orElse(null));
+        }
+    }
+
+    private void writeFlagGroup(
+        String prefix,
+        String flagId,
+        boolean supportsRegionGroup,
+        WorldGuardRegionGroup group
+    ) {
+        String key = prefix + "flag." + flagId + "-group";
+        if (!supportsRegionGroup || group == null) {
+            properties.remove(key);
+        } else {
+            properties.setProperty(key, group.id());
         }
     }
 

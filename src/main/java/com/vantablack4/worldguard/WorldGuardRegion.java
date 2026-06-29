@@ -2,10 +2,15 @@ package com.vantablack4.worldguard;
 
 import com.vantablack4.worldguard.model.RegionDomain;
 import com.vantablack4.worldguard.model.RegionType;
+import com.vantablack4.worldguard.flag.WorldGuardFlagDefinition;
+import com.vantablack4.worldguard.flag.WorldGuardFlagValue;
+import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
+import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +33,8 @@ public record WorldGuardRegion(
     Set<String> ownerGroups,
     Set<String> memberGroups,
     Map<WorldGuardFlag, FlagState> flags,
+    Map<WorldGuardValueFlag, WorldGuardFlagValue> valueFlags,
+    Map<String, WorldGuardRegionGroup> flagGroups,
     List<PolygonPoint> polygonPoints
 ) {
     public static final String GLOBAL_REGION_ID = "__global__";
@@ -98,6 +105,69 @@ public record WorldGuardRegion(
                 || entry.getValue() == FlagState.UNSET
         );
         flags = Collections.unmodifiableMap(copiedFlags);
+
+        EnumMap<WorldGuardValueFlag, WorldGuardFlagValue> copiedValueFlags = new EnumMap<>(WorldGuardValueFlag.class);
+        if (valueFlags != null) {
+            valueFlags.forEach((flag, value) -> {
+                if (flag != null && value != null && value.type() == flag.type()) {
+                    copiedValueFlags.put(flag, value);
+                }
+            });
+        }
+        valueFlags = Collections.unmodifiableMap(copiedValueFlags);
+
+        HashMap<String, WorldGuardRegionGroup> copiedFlagGroups = new HashMap<>();
+        if (flagGroups != null) {
+            flagGroups.forEach((flagId, group) -> {
+                String normalizedFlagId = WorldGuardFlagDefinition.normalize(flagId);
+                if (!normalizedFlagId.isBlank() && group != null) {
+                    copiedFlagGroups.put(normalizedFlagId, group);
+                }
+            });
+        }
+        flagGroups = Collections.unmodifiableMap(copiedFlagGroups);
+    }
+
+    public WorldGuardRegion(
+        String id,
+        String world,
+        int minX,
+        int minY,
+        int minZ,
+        int maxX,
+        int maxY,
+        int maxZ,
+        int priority,
+        String parentId,
+        RegionType type,
+        Set<UUID> owners,
+        Set<UUID> members,
+        Set<String> ownerGroups,
+        Set<String> memberGroups,
+        Map<WorldGuardFlag, FlagState> flags,
+        List<PolygonPoint> polygonPoints
+    ) {
+        this(
+            id,
+            world,
+            minX,
+            minY,
+            minZ,
+            maxX,
+            maxY,
+            maxZ,
+            priority,
+            parentId,
+            type,
+            owners,
+            members,
+            ownerGroups,
+            memberGroups,
+            flags,
+            Map.of(),
+            Map.of(),
+            polygonPoints
+        );
     }
 
     public WorldGuardRegion(
@@ -135,6 +205,8 @@ public record WorldGuardRegion(
             ownerGroups,
             memberGroups,
             flags,
+            Map.of(),
+            Map.of(),
             List.of()
         );
     }
@@ -232,7 +304,10 @@ public record WorldGuardRegion(
             Set.of(),
             Set.of(),
             Set.of(),
-            Map.of()
+            Map.of(),
+            Map.of(),
+            Map.of(),
+            List.of()
         );
     }
 
@@ -285,6 +360,35 @@ public record WorldGuardRegion(
         return flags.getOrDefault(flag, FlagState.UNSET);
     }
 
+    public java.util.Optional<WorldGuardFlagValue> value(WorldGuardValueFlag flag) {
+        if (flag == null) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.ofNullable(valueFlags.get(flag));
+    }
+
+    public java.util.Optional<WorldGuardRegionGroup> explicitFlagGroup(String rawFlagId) {
+        String flagId = WorldGuardFlagDefinition.normalize(rawFlagId);
+        if (flagId.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.ofNullable(flagGroups.get(flagId));
+    }
+
+    public WorldGuardRegionGroup flagGroup(WorldGuardFlag flag) {
+        if (flag == null || !flag.supportsRegionGroup()) {
+            return WorldGuardRegionGroup.ALL;
+        }
+        return explicitFlagGroup(flag.id()).orElse(flag.defaultGroup());
+    }
+
+    public WorldGuardRegionGroup flagGroup(WorldGuardValueFlag flag) {
+        if (flag == null || !flag.supportsRegionGroup()) {
+            return WorldGuardRegionGroup.ALL;
+        }
+        return explicitFlagGroup(flag.id()).orElse(flag.defaultGroup());
+    }
+
     public WorldGuardRegion withFlag(WorldGuardFlag flag, FlagState state) {
         EnumMap<WorldGuardFlag, FlagState> updated = new EnumMap<>(WorldGuardFlag.class);
         updated.putAll(flags);
@@ -294,6 +398,60 @@ public record WorldGuardRegion(
             updated.put(flag, state);
         }
         return copy(parentId, type, owners, members, ownerGroups, memberGroups, updated);
+    }
+
+    public WorldGuardRegion withValue(WorldGuardValueFlag flag, WorldGuardFlagValue value) {
+        if (flag == null) {
+            return this;
+        }
+        EnumMap<WorldGuardValueFlag, WorldGuardFlagValue> updated = new EnumMap<>(WorldGuardValueFlag.class);
+        updated.putAll(valueFlags);
+        if (value == null || value.type() != flag.type()) {
+            updated.remove(flag);
+        } else {
+            updated.put(flag, value);
+        }
+        return copy(parentId, type, owners, members, ownerGroups, memberGroups, flags, updated, flagGroups);
+    }
+
+    public WorldGuardRegion withoutValue(WorldGuardValueFlag flag) {
+        return withValue(flag, null);
+    }
+
+    public WorldGuardRegion withFlagGroup(WorldGuardFlag flag, WorldGuardRegionGroup group) {
+        if (flag == null || !flag.supportsRegionGroup()) {
+            return this;
+        }
+        return withFlagGroup(flag.id(), group);
+    }
+
+    public WorldGuardRegion withFlagGroup(WorldGuardValueFlag flag, WorldGuardRegionGroup group) {
+        if (flag == null || !flag.supportsRegionGroup()) {
+            return this;
+        }
+        return withFlagGroup(flag.id(), group);
+    }
+
+    public WorldGuardRegion withoutFlagGroup(WorldGuardFlag flag) {
+        return withFlagGroup(flag, null);
+    }
+
+    public WorldGuardRegion withoutFlagGroup(WorldGuardValueFlag flag) {
+        return withFlagGroup(flag, null);
+    }
+
+    private WorldGuardRegion withFlagGroup(String rawFlagId, WorldGuardRegionGroup group) {
+        String flagId = WorldGuardFlagDefinition.normalize(rawFlagId);
+        if (flagId.isBlank()) {
+            return this;
+        }
+        HashMap<String, WorldGuardRegionGroup> updated = new HashMap<>(flagGroups);
+        if (group == null) {
+            updated.remove(flagId);
+        } else {
+            updated.put(flagId, group);
+        }
+        return copy(parentId, type, owners, members, ownerGroups, memberGroups, flags, valueFlags, updated);
     }
 
     public WorldGuardRegion withParent(String rawParentId) {
@@ -314,6 +472,10 @@ public record WorldGuardRegion(
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(owners);
         updated.remove(playerUuid);
         return copy(parentId, type, updated, members, ownerGroups, memberGroups, flags);
+    }
+
+    public WorldGuardRegion withoutOwners() {
+        return copy(parentId, type, Set.of(), members, Set.of(), memberGroups, flags);
     }
 
     public WorldGuardRegion withOwnerGroup(String group) {
@@ -338,6 +500,10 @@ public record WorldGuardRegion(
         java.util.HashSet<UUID> updated = new java.util.HashSet<>(members);
         updated.remove(playerUuid);
         return copy(parentId, type, owners, updated, ownerGroups, memberGroups, flags);
+    }
+
+    public WorldGuardRegion withoutMembers() {
+        return copy(parentId, type, owners, Set.of(), ownerGroups, Set.of(), flags);
     }
 
     public WorldGuardRegion withMemberGroup(String group) {
@@ -382,6 +548,20 @@ public record WorldGuardRegion(
         Set<String> memberGroups,
         Map<WorldGuardFlag, FlagState> flags
     ) {
+        return copy(parentId, type, owners, members, ownerGroups, memberGroups, flags, valueFlags, flagGroups);
+    }
+
+    private WorldGuardRegion copy(
+        String parentId,
+        RegionType type,
+        Set<UUID> owners,
+        Set<UUID> members,
+        Set<String> ownerGroups,
+        Set<String> memberGroups,
+        Map<WorldGuardFlag, FlagState> flags,
+        Map<WorldGuardValueFlag, WorldGuardFlagValue> valueFlags,
+        Map<String, WorldGuardRegionGroup> flagGroups
+    ) {
         return new WorldGuardRegion(
             id,
             world,
@@ -399,6 +579,8 @@ public record WorldGuardRegion(
             ownerGroups,
             memberGroups,
             flags,
+            valueFlags,
+            flagGroups,
             polygonPoints
         );
     }

@@ -40,6 +40,7 @@ import net.minecraft.world.level.Level;
 import com.vantablack4.worldguard.worldedit.WorldEditRegionSelection;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionResult;
 import com.vantablack4.worldguard.worldedit.WorldEditSelectionSource;
+import com.vantablack4.worldguard.worldedit.WorldEditSelectionWriteResult;
 
 public final class WorldGuardCommands {
     private static final String ID_ARGUMENT = "region";
@@ -49,6 +50,7 @@ public final class WorldGuardCommands {
     private static final String PLAYER_ARGUMENT = "player";
     private static final String DOMAIN_ARGUMENT = "domain";
     private static final String PRIORITY_ARGUMENT = "priority";
+    private static final String BYPASS_ARGUMENT = "bypass";
     private static final SimpleCommandExceptionType PLAYER_NOT_FOUND =
         new SimpleCommandExceptionType(Component.translatable("argument.player.notfound"));
 
@@ -93,16 +95,16 @@ public final class WorldGuardCommands {
             .executes(this::help)
             .then(Commands.literal("help").executes(this::help))
             .then(Commands.literal("save")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "save"))
                 .executes(this::saveRegions))
             .then(Commands.literal("write")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "save"))
                 .executes(this::saveRegions))
             .then(Commands.literal("load")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "load"))
                 .executes(this::loadRegions))
             .then(Commands.literal("reload")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "load"))
                 .executes(this::loadRegions))
             .then(Commands.literal("list").executes(this::list))
             .then(Commands.literal("info")
@@ -112,40 +114,52 @@ public final class WorldGuardCommands {
                 .executes(this::infoHere)
                 .then(regionArgument().executes(this::info)))
             .then(Commands.literal("define")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "define"))
                 .then(defineArguments()))
             .then(Commands.literal("def")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "define"))
                 .then(defineArguments()))
             .then(Commands.literal("d")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "define"))
                 .then(defineArguments()))
             .then(Commands.literal("create")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "define"))
                 .then(defineArguments()))
             .then(Commands.literal("claim")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "claim"))
                 .then(regionArgument().executes(this::claimFromWorldEditSelection)))
+            .then(Commands.literal("select")
+                .requires(source -> mayRegion(source, "select"))
+                .executes(this::selectHere)
+                .then(regionArgument().executes(this::selectRegion)))
+            .then(Commands.literal("sel")
+                .requires(source -> mayRegion(source, "select"))
+                .executes(this::selectHere)
+                .then(regionArgument().executes(this::selectRegion)))
+            .then(Commands.literal("s")
+                .requires(source -> mayRegion(source, "select"))
+                .executes(this::selectHere)
+                .then(regionArgument().executes(this::selectRegion)))
             .then(Commands.literal("redefine")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "redefine"))
                 .then(redefineArguments()))
             .then(Commands.literal("update")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "redefine"))
                 .then(redefineArguments()))
             .then(Commands.literal("move")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "redefine"))
                 .then(redefineArguments()))
             .then(Commands.literal("delete")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "remove"))
                 .then(regionArgument().executes(this::delete)))
             .then(Commands.literal("del")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "remove"))
                 .then(regionArgument().executes(this::delete)))
             .then(Commands.literal("remove")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "remove"))
                 .then(regionArgument().executes(this::delete)))
             .then(Commands.literal("rem")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "remove"))
                 .then(regionArgument().executes(this::delete)))
             .then(Commands.literal("teleport")
                 .then(regionArgument().executes(this::teleport)))
@@ -155,68 +169,80 @@ public final class WorldGuardCommands {
                 .executes(this::flagsHere)
                 .then(regionArgument().executes(this::regionFlags)))
             .then(Commands.literal("flag")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "flag.regions"))
                 .then(flagArguments()))
             .then(Commands.literal("f")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "flag.regions"))
                 .then(flagArguments()))
             .then(Commands.literal("setpriority")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setpriority"))
                 .then(setPriorityArguments()))
             .then(Commands.literal("priority")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setpriority"))
                 .then(setPriorityArguments()))
             .then(Commands.literal("pri")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setpriority"))
                 .then(setPriorityArguments()))
             .then(Commands.literal("setparent")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setparent"))
                 .then(setParentArguments()))
             .then(Commands.literal("parent")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setparent"))
                 .then(setParentArguments()))
             .then(Commands.literal("par")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "setparent"))
                 .then(setParentArguments()))
             .then(Commands.literal("addmem")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "addmember"))
                 .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("am")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "addmember"))
                 .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("addowner")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "addowner"))
                 .then(domainRegionArguments(this::addOwnerDomain)))
             .then(Commands.literal("ao")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "addowner"))
                 .then(domainRegionArguments(this::addOwnerDomain)))
             .then(Commands.literal("removeowner")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeOwnerDomain)))
+                .requires(source -> mayRegion(source, "removeowner"))
+                .then(removeDomainRegionArguments(this::removeOwnerDomain, this::clearOwners)))
             .then(Commands.literal("remowner")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeOwnerDomain)))
+                .requires(source -> mayRegion(source, "removeowner"))
+                .then(removeDomainRegionArguments(this::removeOwnerDomain, this::clearOwners)))
             .then(Commands.literal("ro")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeOwnerDomain)))
+                .requires(source -> mayRegion(source, "removeowner"))
+                .then(removeDomainRegionArguments(this::removeOwnerDomain, this::clearOwners)))
             .then(Commands.literal("addmember")
-                .requires(this::isAdmin)
+                .requires(source -> mayRegion(source, "addmember"))
                 .then(domainRegionArguments(this::addMemberDomain)))
             .then(Commands.literal("removemember")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeMemberDomain)))
+                .requires(source -> mayRegion(source, "removemember"))
+                .then(removeDomainRegionArguments(this::removeMemberDomain, this::clearMembers)))
             .then(Commands.literal("removemem")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeMemberDomain)))
+                .requires(source -> mayRegion(source, "removemember"))
+                .then(removeDomainRegionArguments(this::removeMemberDomain, this::clearMembers)))
             .then(Commands.literal("remmember")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeMemberDomain)))
+                .requires(source -> mayRegion(source, "removemember"))
+                .then(removeDomainRegionArguments(this::removeMemberDomain, this::clearMembers)))
             .then(Commands.literal("remmem")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeMemberDomain)))
+                .requires(source -> mayRegion(source, "removemember"))
+                .then(removeDomainRegionArguments(this::removeMemberDomain, this::clearMembers)))
             .then(Commands.literal("rm")
-                .requires(this::isAdmin)
-                .then(domainRegionArguments(this::removeMemberDomain)));
+                .requires(source -> mayRegion(source, "removemember"))
+                .then(removeDomainRegionArguments(this::removeMemberDomain, this::clearMembers)))
+            .then(Commands.literal("toggle-bypass")
+                .requires(source -> WorldGuardPermissions.toggleBypassPermission(source, config))
+                .executes(this::toggleBypass)
+                .then(Commands.argument(BYPASS_ARGUMENT, StringArgumentType.word())
+                    .suggests(this::suggestBypassStates)
+                    .executes(this::setBypass)))
+            .then(Commands.literal("bypass")
+                .requires(source -> WorldGuardPermissions.toggleBypassPermission(source, config))
+                .executes(this::toggleBypass)
+                .then(Commands.argument(BYPASS_ARGUMENT, StringArgumentType.word())
+                    .suggests(this::suggestBypassStates)
+                    .executes(this::setBypass)));
     }
 
     private int help(CommandContext<CommandSourceStack> context) {
@@ -393,8 +419,48 @@ public final class WorldGuardCommands {
         WorldGuardRegion region = result.selection().toDefaultProtectedRegion(id, 0)
             .withOwner(player.getUUID());
         storage.save(region);
-        context.getSource().sendSystemMessage(success(WorldGuardText.createdRegion(id)));
-        context.getSource().sendSystemMessage(success(WorldGuardText.ownersAdded(id)));
+        context.getSource().sendSystemMessage(success(WorldGuardText.claimedRegion(id)));
+        return 1;
+    }
+
+    private int selectHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = playerOrMessage(context, "Please specify a region name.");
+        if (player == null) {
+            return 0;
+        }
+        List<WorldGuardRegion> regions = storage.regionsAt(
+            worldId(player),
+            player.blockPosition().getX(),
+            player.blockPosition().getY(),
+            player.blockPosition().getZ()
+        );
+        if (regions.isEmpty()) {
+            context.getSource().sendSystemMessage(error("Please specify a region name."));
+            return 0;
+        }
+        if (regions.size() > 1) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.multipleStandingRegions()));
+            return 0;
+        }
+        return selectRegion(context, regions.getFirst());
+    }
+
+    private int selectRegion(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        Optional<WorldGuardRegion> region = findExistingRegion(context, getString(context, ID_ARGUMENT), false);
+        if (region.isEmpty()) {
+            return 0;
+        }
+        return selectRegion(context, region.get());
+    }
+
+    private int selectRegion(CommandContext<CommandSourceStack> context, WorldGuardRegion region) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        WorldEditSelectionWriteResult result = worldEditSelectionSource.selectRegion(player, region);
+        if (!result.selected()) {
+            context.getSource().sendSystemMessage(error(result.message()));
+            return 0;
+        }
+        context.getSource().sendSystemMessage(success(WorldGuardText.regionSelected(result.typeName())));
         return 1;
     }
 
@@ -769,6 +835,23 @@ public final class WorldGuardCommands {
         return 1;
     }
 
+    private int clearOwners(CommandContext<CommandSourceStack> context) {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        return storage.clearOwners(id, world)
+            .map(region -> {
+                context.getSource().sendSystemMessage(success(WorldGuardText.ownersRemoved(region.id())));
+                return 1;
+            })
+            .orElseGet(() -> {
+                noRegion(context, id);
+                return 0;
+            });
+    }
+
     private int addMemberDomain(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String id = regionIdForAllowedGlobalCommand(context);
         if (id.isBlank()) {
@@ -809,8 +892,56 @@ public final class WorldGuardCommands {
         return 1;
     }
 
+    private int clearMembers(CommandContext<CommandSourceStack> context) {
+        String id = regionIdForAllowedGlobalCommand(context);
+        if (id.isBlank()) {
+            return 0;
+        }
+        String world = commandWorld(context);
+        return storage.clearMembers(id, world)
+            .map(region -> {
+                context.getSource().sendSystemMessage(success(WorldGuardText.membersRemoved(region.id())));
+                return 1;
+            })
+            .orElseGet(() -> {
+                noRegion(context, id);
+                return 0;
+            });
+    }
+
+    private int missingRemoveDomains(CommandContext<CommandSourceStack> context) {
+        context.getSource().sendSystemMessage(error(WorldGuardText.listNamesToRemoveOrAll()));
+        return 0;
+    }
+
+    private int toggleBypass(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        return setBypass(context, player, WorldGuardPermissions.hasBypassDisabled(player.getUUID()));
+    }
+
+    private int setBypass(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        String value = getString(context, BYPASS_ARGUMENT);
+        if (!value.equalsIgnoreCase("on") && !value.equalsIgnoreCase("off")) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidBypassArgument()));
+            return 0;
+        }
+        return setBypass(context, context.getSource().getPlayerOrException(), value.equalsIgnoreCase("on"));
+    }
+
+    private int setBypass(CommandContext<CommandSourceStack> context, ServerPlayer player, boolean enabled) {
+        WorldGuardPermissions.setBypassDisabled(player.getUUID(), !enabled);
+        context.getSource().sendSystemMessage(Component.literal(
+            enabled ? WorldGuardText.bypassEnabled() : WorldGuardText.bypassDisabled()
+        ));
+        return 1;
+    }
+
     private boolean isAdmin(CommandSourceStack source) {
         return WorldGuardPermissions.admin(source, config);
+    }
+
+    private boolean mayRegion(CommandSourceStack source, String command) {
+        return WorldGuardPermissions.regionCommand(source, config, command);
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, String> regionArgument() {
@@ -833,6 +964,21 @@ public final class WorldGuardCommands {
                     builder
                 ))
                 .executes(command));
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> removeDomainRegionArguments(
+        Command<CommandSourceStack> removeCommand,
+        Command<CommandSourceStack> clearCommand
+    ) {
+        return regionArgument()
+            .executes(this::missingRemoveDomains)
+            .then(Commands.literal("-a").executes(clearCommand))
+            .then(Commands.argument(DOMAIN_ARGUMENT, StringArgumentType.greedyString())
+                .suggests((context, builder) -> SharedSuggestionProvider.suggest(
+                    context.getSource().getServer().getPlayerNames(),
+                    builder
+                ))
+                .executes(removeCommand));
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, String> flagArguments() {
@@ -893,6 +1039,10 @@ public final class WorldGuardCommands {
 
     private CompletableFuture<Suggestions> suggestStates(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
         return SharedSuggestionProvider.suggest(List.of("allow", "deny", "unset"), builder);
+    }
+
+    private CompletableFuture<Suggestions> suggestBypassStates(CommandContext<CommandSourceStack> context, SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(List.of("on", "off"), builder);
     }
 
     private String checkRegionId(CommandContext<CommandSourceStack> context, String rawId, boolean allowGlobal) {

@@ -35,6 +35,10 @@ final class WorldGuardText {
         return "A new region has been made named '" + id + "'.";
     }
 
+    static String claimedRegion(String id) {
+        return "A new region has been claimed named '" + id + "'.";
+    }
+
     static String regionAlreadyExists(String id) {
         return "A region with that name already exists. Please choose another name."
             + " To change the shape, use /region redefine " + id + ".";
@@ -50,6 +54,10 @@ final class WorldGuardText {
 
     static String teleportedToRegion(String id) {
         return "Teleported you to the '" + id + "' region.";
+    }
+
+    static String regionSelected(String typeName) {
+        return "Region selected as " + typeName;
     }
 
     static String worldNotLoaded(String world) {
@@ -107,6 +115,22 @@ final class WorldGuardText {
 
     static String ownersRemoved(String regionId) {
         return "Region '" + regionId + "' updated with owners removed.";
+    }
+
+    static String listNamesToRemoveOrAll() {
+        return "List some names to remove, or use -a to remove all.";
+    }
+
+    static String invalidBypassArgument() {
+        return "Allowed optional arguments are: on, off";
+    }
+
+    static String bypassEnabled() {
+        return "You are now bypassing region protection (as long as you have permission).";
+    }
+
+    static String bypassDisabled() {
+        return "You are no longer bypassing region protection.";
     }
 
     static String configurationReloaded() {

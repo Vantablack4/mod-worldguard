@@ -115,6 +115,10 @@ public final class WorldGuardHooks {
             if (!(player instanceof ServerPlayer serverPlayer)) {
                 return InteractionResult.PASS;
             }
+            if (WorldGuardProtectionHooks.isItemFrame(entity)
+                && denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.ITEM_FRAME_ROTATE, WorldGuardFlag.USE_ENTITY)) {
+                return InteractionResult.FAIL;
+            }
             if (WorldGuardProtectionHooks.isEntityContainerAccess(entity)
                 && denyAny(serverPlayer, world, entity.blockPosition(), WorldGuardFlag.CHEST_ACCESS, WorldGuardFlag.USE_ENTITY)) {
                 return InteractionResult.FAIL;

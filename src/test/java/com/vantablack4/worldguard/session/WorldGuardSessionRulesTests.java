@@ -76,6 +76,34 @@ final class WorldGuardSessionRulesTests {
     }
 
     @Test
+    void entryDenyUsesDefaultNonMemberGroupForMovement() {
+        WorldGuardRegion region = new WorldGuardRegion(
+            "spawn",
+            WORLD,
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            0,
+            Set.of(PLAYER),
+            Map.of(WorldGuardFlag.ENTRY, FlagState.DENY)
+        );
+
+        WorldGuardMovementDecision decision = WorldGuardSessionRules.movementDecision(
+            Set.of(region),
+            WORLD,
+            new BlockPos(-1, 5, 5),
+            new BlockPos(0, 5, 5),
+            PLAYER,
+            false
+        );
+
+        assertThat(decision.allowed()).isTrue();
+    }
+
+    @Test
     void exitDenyBlocksLeavingRegion() {
         WorldGuardRegion region = region("jail", Map.of(WorldGuardFlag.EXIT, FlagState.DENY));
 
