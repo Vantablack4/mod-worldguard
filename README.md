@@ -30,10 +30,10 @@ Included in the Fabric port:
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   teleport use, chat send, sleep, PvP, fall damage, invincibility, item drop,
-  item pickup, item frame rotation, crop and block trampling, pressure plates,
+  item pickup, vehicle placement/destruction, item frame rotation, crop and block trampling, pressure plates,
   buttons, tripwire, hoppers, lightning, snow/ice weather, melt, plant growth,
-  leaf decay, mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk
-  mutations.
+  sapling/tree feature growth, leaf decay,
+  mushroom/grass/mycelium/vine/copper/coral/dripstone/sculk mutations.
 - Runtime effects for `greeting`, `farewell`, `deny-message`,
   `entry-deny-message`, `exit-deny-message`, `blocked-cmds`, `allowed-cmds`,
   `game-mode`, and heal/feed flags.
@@ -57,9 +57,7 @@ Not included yet:
 - Full WorldGuard Bukkit API compatibility.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags,
-  including region list owner/name-domain/selection filters (`-p`, `-n`, `-s`)
-  and remaining `/region info` options.
-- Recipient chat filtering and sapling/tree feature growth.
+  including remaining `/region info` options.
 
 ## Commands
 

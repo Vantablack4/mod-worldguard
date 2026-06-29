@@ -112,7 +112,9 @@ final class WorldGuardProtectionHooksTests {
         assertThat(WorldGuardProtectionHooks.nonLivingDamageFlags(EntityType.GLOW_ITEM_FRAME, null))
             .containsExactly(WorldGuardFlag.ENTITY_ITEM_FRAME_DESTROY);
         assertThat(WorldGuardProtectionHooks.nonLivingDamageFlags(EntityType.MINECART, null))
-            .isEmpty();
+            .containsExactly(WorldGuardFlag.VEHICLE_DESTROY);
+        assertThat(WorldGuardProtectionHooks.nonLivingDamageFlags(EntityType.OAK_BOAT, null))
+            .containsExactly(WorldGuardFlag.VEHICLE_DESTROY);
     }
 
     @Test
@@ -136,6 +138,37 @@ final class WorldGuardProtectionHooksTests {
             .containsExactly(WorldGuardFlag.INTERACT, WorldGuardFlag.USE);
         assertThat(WorldGuardProtectionHooks.portalEntryFlags())
             .containsExactly(WorldGuardFlag.EXIT_VIA_TELEPORT, WorldGuardFlag.EXIT);
+    }
+
+    @Test
+    void vehiclePlacementUsesUpstreamBuildAndVehiclePlaceFlags() {
+        assertThat(WorldGuardProtectionHooks.vehiclePlaceFlags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.VEHICLE_PLACE);
+        assertThat(WorldGuardProtectionHooks.entityPlaceFlags())
+            .containsExactly(WorldGuardFlag.BUILD);
+    }
+
+    @Test
+    void vehicleTypesMatchUpstreamBoatsAndMinecartsOnly() {
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.OAK_BOAT)).isTrue();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.BAMBOO_CHEST_RAFT)).isTrue();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.MINECART)).isTrue();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.TNT_MINECART)).isTrue();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.ARMOR_STAND)).isFalse();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.END_CRYSTAL)).isFalse();
+        assertThat(WorldGuardProtectionHooks.vehicleType(EntityType.ZOMBIE)).isFalse();
+    }
+
+    @Test
+    void treeFeatureGrowthUsesCropGrowthFlagAtOrigin() {
+        assertThat(WorldGuardProtectionHooks.treeFeatureGrowthFlags())
+            .containsExactly(WorldGuardFlag.CROP_GROWTH);
+    }
+
+    @Test
+    void generatedTreeBlocksUseBuildPlacementFlagsAtTargets() {
+        assertThat(WorldGuardProtectionHooks.generatedTreeBlockFlags())
+            .containsExactly(WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE);
     }
 
     @Test
@@ -220,6 +253,62 @@ final class WorldGuardProtectionHooksTests {
             "minecraft:overworld",
             new BlockPos(5, 64, 5),
             WorldGuardProtectionHooks.trampleFlags(true)
+        )).isTrue();
+    }
+
+    @Test
+    void globalVehicleFlagsDenyPlaceAndDestroyMutations() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.VEHICLE_PLACE, FlagState.DENY)
+            .withFlag(WorldGuardFlag.VEHICLE_DESTROY, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.vehiclePlaceFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            pos,
+            WorldGuardFlag.VEHICLE_DESTROY
+        )).isTrue();
+    }
+
+    @Test
+    void globalCropGrowthDenyBlocksSaplingAndTreeFeatureOriginGrowth() {
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.CROP_GROWTH, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(global),
+            "minecraft:overworld",
+            new BlockPos(5, 64, 5),
+            WorldGuardProtectionHooks.treeFeatureGrowthFlags()
+        )).isTrue();
+    }
+
+    @Test
+    void globalBuildOrBlockPlaceDenyBlocksGeneratedTreeBlocks() {
+        BlockPos pos = new BlockPos(5, 64, 5);
+        WorldGuardRegion buildDeny = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.BUILD, FlagState.DENY);
+        WorldGuardRegion placeDeny = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.BLOCK_PLACE, FlagState.DENY);
+
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(buildDeny),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.generatedTreeBlockFlags()
+        )).isTrue();
+        assertThat(WorldGuardProtectionHooks.deniesAny(
+            List.of(placeDeny),
+            "minecraft:overworld",
+            pos,
+            WorldGuardProtectionHooks.generatedTreeBlockFlags()
         )).isTrue();
     }
 

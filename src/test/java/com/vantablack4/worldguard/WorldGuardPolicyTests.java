@@ -238,6 +238,61 @@ final class WorldGuardPolicyTests {
     }
 
     @Test
+    void globalReceiveChatDenyAppliesToRecipientsEverywhere() {
+        UUID recipient = UUID.randomUUID();
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.RECEIVE_CHAT, FlagState.DENY);
+
+        ProtectionDecision decision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.RECEIVE_CHAT,
+            recipient,
+            false
+        );
+
+        assertThat(decision.allowed()).isFalse();
+        assertThat(decision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
+    void globalNaturalRegenAndHungerDrainDeniesApplyEverywhere() {
+        UUID player = UUID.randomUUID();
+        WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.HEALTH_REGEN, FlagState.DENY)
+            .withFlag(WorldGuardFlag.HUNGER_DRAIN, FlagState.DENY);
+
+        ProtectionDecision regenDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.HEALTH_REGEN,
+            player,
+            false
+        );
+        ProtectionDecision hungerDecision = WorldGuardPolicy.evaluate(
+            List.of(global),
+            "minecraft:overworld",
+            100,
+            64,
+            100,
+            WorldGuardFlag.HUNGER_DRAIN,
+            player,
+            false
+        );
+
+        assertThat(regenDecision.allowed()).isFalse();
+        assertThat(hungerDecision.allowed()).isFalse();
+        assertThat(regenDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+        assertThat(hungerDecision.regionId()).isEqualTo(WorldGuardRegion.GLOBAL_REGION_ID);
+    }
+
+    @Test
     void blankGlobalRegionDoesNotDenyMembershipDefaultBuild() {
         UUID player = UUID.randomUUID();
         WorldGuardRegion global = WorldGuardRegion.global("minecraft:overworld");
@@ -501,6 +556,8 @@ final class WorldGuardPolicyTests {
     void fuzzyFlagNamesMatchUpstreamStyleAliases() {
         assertThat(WorldGuardFlag.parse("blockplace")).contains(WorldGuardFlag.BLOCK_PLACE);
         assertThat(WorldGuardFlag.parse("block_place")).contains(WorldGuardFlag.BLOCK_PLACE);
+        assertThat(WorldGuardFlag.parse("vehicle-place")).contains(WorldGuardFlag.VEHICLE_PLACE);
+        assertThat(WorldGuardFlag.parse("vehicledestroy")).contains(WorldGuardFlag.VEHICLE_DESTROY);
         assertThat(WorldGuardValueFlag.parse("denyspawn")).contains(WorldGuardValueFlag.DENY_SPAWN);
     }
 

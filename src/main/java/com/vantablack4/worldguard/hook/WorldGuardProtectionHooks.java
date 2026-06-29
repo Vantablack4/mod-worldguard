@@ -17,6 +17,8 @@ import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.ContainerEntity;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
+import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
@@ -24,6 +26,7 @@ import net.minecraft.world.item.BucketItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelWriter;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.AbstractChestBlock;
 import net.minecraft.world.level.block.Block;
@@ -106,6 +109,20 @@ public final class WorldGuardProtectionHooks {
             return WorldGuardSessionHooks.denyAction(serverPlayer, pos, flags);
         }
         return deniesAny(level, pos, flags);
+    }
+
+    public static boolean deniesVehiclePlace(ServerPlayer player, Level level, BlockPos pos) {
+        if (player == null || !shouldCheck(level) || pos == null) {
+            return false;
+        }
+        return WorldGuardSessionHooks.denyAction(player, pos, vehiclePlaceFlags());
+    }
+
+    public static boolean deniesEntityPlace(ServerPlayer player, Level level, BlockPos pos) {
+        if (player == null || !shouldCheck(level) || pos == null) {
+            return false;
+        }
+        return WorldGuardSessionHooks.denyAction(player, pos, entityPlaceFlags());
     }
 
     public static boolean deniesMobGrief(Level level, BlockPos pos) {
@@ -349,6 +366,14 @@ public final class WorldGuardProtectionHooks {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.CROP_GROWTH);
     }
 
+    public static boolean deniesTreeFeatureGrowth(LevelAccessor level, BlockPos pos) {
+        return deniesNaturalMutation(level, pos, treeFeatureGrowthFlags());
+    }
+
+    public static boolean deniesGeneratedTreeBlock(LevelWriter level, BlockPos pos) {
+        return level instanceof Level concreteLevel && deniesAny(concreteLevel, pos, generatedTreeBlockFlags());
+    }
+
     public static boolean deniesMushroomGrowth(LevelAccessor level, BlockPos pos) {
         return deniesNaturalMutation(level, pos, WorldGuardFlag.MUSHROOMS);
     }
@@ -411,6 +436,9 @@ public final class WorldGuardProtectionHooks {
 
     static WorldGuardFlag[] nonLivingDamageFlags(EntityType<?> victimType, Entity attacker) {
         List<WorldGuardFlag> flags = new ArrayList<>();
+        if (vehicleType(victimType)) {
+            flags.add(WorldGuardFlag.VEHICLE_DESTROY);
+        }
         if (victimType == EntityType.PAINTING) {
             flags.add(WorldGuardFlag.ENTITY_PAINTING_DESTROY);
         }
@@ -423,6 +451,40 @@ public final class WorldGuardProtectionHooks {
             flags.add(WorldGuardFlag.MOB_DAMAGE);
         }
         return flags.toArray(WorldGuardFlag[]::new);
+    }
+
+    static boolean vehicleType(EntityType<?> type) {
+        return type == EntityType.BAMBOO_CHEST_RAFT
+            || type == EntityType.BAMBOO_RAFT
+            || type == EntityType.ACACIA_BOAT
+            || type == EntityType.ACACIA_CHEST_BOAT
+            || type == EntityType.BIRCH_BOAT
+            || type == EntityType.BIRCH_CHEST_BOAT
+            || type == EntityType.CHERRY_BOAT
+            || type == EntityType.CHERRY_CHEST_BOAT
+            || type == EntityType.DARK_OAK_BOAT
+            || type == EntityType.DARK_OAK_CHEST_BOAT
+            || type == EntityType.JUNGLE_BOAT
+            || type == EntityType.JUNGLE_CHEST_BOAT
+            || type == EntityType.MANGROVE_BOAT
+            || type == EntityType.MANGROVE_CHEST_BOAT
+            || type == EntityType.OAK_BOAT
+            || type == EntityType.OAK_CHEST_BOAT
+            || type == EntityType.PALE_OAK_BOAT
+            || type == EntityType.PALE_OAK_CHEST_BOAT
+            || type == EntityType.SPRUCE_BOAT
+            || type == EntityType.SPRUCE_CHEST_BOAT
+            || type == EntityType.CHEST_MINECART
+            || type == EntityType.COMMAND_BLOCK_MINECART
+            || type == EntityType.FURNACE_MINECART
+            || type == EntityType.HOPPER_MINECART
+            || type == EntityType.MINECART
+            || type == EntityType.SPAWNER_MINECART
+            || type == EntityType.TNT_MINECART;
+    }
+
+    public static boolean vehicle(Entity entity) {
+        return entity instanceof AbstractBoat || entity instanceof AbstractMinecart;
     }
 
     public static BlockPos bucketMutationTarget(ItemStack stack, BlockPos clicked, Direction direction) {
@@ -501,6 +563,22 @@ public final class WorldGuardProtectionHooks {
 
     static WorldGuardFlag[] portalEntryFlags() {
         return new WorldGuardFlag[] { WorldGuardFlag.EXIT_VIA_TELEPORT, WorldGuardFlag.EXIT };
+    }
+
+    static WorldGuardFlag[] vehiclePlaceFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.VEHICLE_PLACE };
+    }
+
+    static WorldGuardFlag[] entityPlaceFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD };
+    }
+
+    static WorldGuardFlag[] treeFeatureGrowthFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.CROP_GROWTH };
+    }
+
+    static WorldGuardFlag[] generatedTreeBlockFlags() {
+        return new WorldGuardFlag[] { WorldGuardFlag.BUILD, WorldGuardFlag.BLOCK_PLACE };
     }
 
     static WorldGuardFlag spreadingSnowyFlag(BlockState state) {

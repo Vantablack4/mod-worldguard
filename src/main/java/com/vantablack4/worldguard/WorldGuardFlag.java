@@ -15,6 +15,8 @@ public enum WorldGuardFlag {
     USE(memberBypass("use")),
     INTERACT(memberBypass("interact")),
     CHEST_ACCESS(memberBypass("chest-access")),
+    VEHICLE_PLACE(memberBypass("vehicle-place")),
+    VEHICLE_DESTROY(memberBypass("vehicle-destroy")),
     USE_ENTITY(memberBypass("use-entity", "entity-use")),
     ATTACK_ENTITY(memberBypass("attack-entity")),
     ITEM_USE(memberBypass("item-use")),

@@ -39,6 +39,10 @@ final class WorldGuardText {
         return "No regions matched the id search '" + idFilter + "'.";
     }
 
+    static String noRegionsOwnedBy(String player) {
+        return "No regions could be found for '" + player + "'.";
+    }
+
     static String invalidListPage(int page, int pageCount) {
         return "Page " + page + " is not valid. Available pages: 1-" + pageCount + ".";
     }
@@ -90,6 +94,10 @@ final class WorldGuardText {
 
     static String worldNotLoaded(String world) {
         return "World '" + world + "' is not loaded.";
+    }
+
+    static String userDoesNotExist(String player) {
+        return "A user by the name of '" + player + "' does not seem to exist.";
     }
 
     static String unknownFlag(String flag) {
@@ -202,6 +210,8 @@ final class WorldGuardText {
             case SLEEP -> "sleep";
             case RESPAWN_ANCHORS -> "use anchors";
             case TNT -> "use explosives";
+            case VEHICLE_PLACE -> "place vehicles";
+            case VEHICLE_DESTROY -> "break vehicles";
             case ITEM_DROP -> "drop items";
             case ITEM_PICKUP -> "pick up items";
             case RIDE -> "ride that";

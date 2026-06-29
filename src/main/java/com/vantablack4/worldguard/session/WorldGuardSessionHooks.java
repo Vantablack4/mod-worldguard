@@ -82,6 +82,21 @@ public final class WorldGuardSessionHooks {
         return active != null && active.denyAction(player, pos, flags);
     }
 
+    public static boolean allowsReceiveChat(ServerPlayer player) {
+        WorldGuardSessionRuntime active = runtime;
+        return active == null || active.allowsReceiveChat(player);
+    }
+
+    public static boolean deniesNaturalHealthRegen(ServerPlayer player) {
+        WorldGuardSessionRuntime active = runtime;
+        return active != null && active.deniesPassiveFlag(player, WorldGuardFlag.HEALTH_REGEN);
+    }
+
+    public static boolean deniesNaturalHungerDrain(ServerPlayer player) {
+        WorldGuardSessionRuntime active = runtime;
+        return active != null && active.deniesPassiveFlag(player, WorldGuardFlag.HUNGER_DRAIN);
+    }
+
     public static boolean denyItemPickup(ServerPlayer player, Entity itemEntity) {
         return denyAction(player, itemEntity == null ? null : itemEntity.blockPosition(), WorldGuardFlag.ITEM_PICKUP);
     }
@@ -232,6 +247,42 @@ final class WorldGuardSessionRuntime {
             flags
         );
         return service.deny(player, decision, worldId(player.level()), checkPos);
+    }
+
+    boolean allowsReceiveChat(ServerPlayer player) {
+        if (player == null) {
+            return true;
+        }
+
+        List<WorldGuardRegion> regions = service.storage().regions();
+        ProtectionDecision decision = WorldGuardSessionRules.checkAny(
+            regions,
+            worldId(player.level()),
+            player.blockPosition(),
+            player.getUUID(),
+            service.regionGroups(player, regions),
+            service.isAdmin(player),
+            WorldGuardFlag.RECEIVE_CHAT
+        );
+        return decision.allowed();
+    }
+
+    boolean deniesPassiveFlag(ServerPlayer player, WorldGuardFlag flag) {
+        if (player == null || flag == null) {
+            return false;
+        }
+
+        List<WorldGuardRegion> regions = service.storage().regions();
+        ProtectionDecision decision = WorldGuardSessionRules.checkAny(
+            regions,
+            worldId(player.level()),
+            player.blockPosition(),
+            player.getUUID(),
+            service.regionGroups(player, regions),
+            service.isAdmin(player),
+            flag
+        );
+        return !decision.allowed();
     }
 
     boolean allowCommand(ServerPlayer player, String command) {

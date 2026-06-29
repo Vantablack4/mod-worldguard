@@ -3,6 +3,8 @@ package com.vantablack4.worldguard;
 import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -15,9 +17,11 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.context.ParsedCommandNode;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -63,7 +67,13 @@ public final class WorldGuardCommands {
     private static final String LIST_PAGE_ARGUMENT = "page";
     private static final String LIST_WORLD_ARGUMENT = "world";
     private static final String LIST_ID_FILTER_ARGUMENT = "idSearch";
+    private static final String LIST_PLAYER_ARGUMENT = "owner";
     static final int LIST_PAGE_SIZE = 8;
+    private static final int LIST_WORLD_FLAG = 1;
+    private static final int LIST_ID_FILTER_FLAG = 1 << 1;
+    private static final int LIST_PLAYER_FLAG = 1 << 2;
+    private static final int LIST_NAME_ONLY_FLAG = 1 << 3;
+    private static final int LIST_SELECTION_FLAG = 1 << 4;
     private static final List<String> REGION_GROUP_IDS = List.of(
         "members",
         "member",
@@ -277,34 +287,65 @@ public final class WorldGuardCommands {
     }
 
     private LiteralArgumentBuilder<CommandSourceStack> listArguments() {
-        return Commands.literal("list")
-            .executes(this::list)
-            .then(listPageArgument())
-            .then(listWorldFlag(true))
-            .then(listIdFilterFlag(true));
+        LiteralArgumentBuilder<CommandSourceStack> list = Commands.literal("list")
+            .executes(this::list);
+        return appendListOptions(list, 0);
     }
 
-    private LiteralArgumentBuilder<CommandSourceStack> listWorldFlag(boolean allowIdFilter) {
+    private <T extends ArgumentBuilder<CommandSourceStack, T>> T appendListOptions(T node, int flags) {
+        node.then(listPageArgument());
+        if ((flags & LIST_WORLD_FLAG) == 0) {
+            node.then(listWorldFlag(flags));
+        }
+        if ((flags & LIST_ID_FILTER_FLAG) == 0) {
+            node.then(listIdFilterFlag(flags));
+        }
+        if ((flags & LIST_PLAYER_FLAG) == 0) {
+            node.then(listPlayerFlag(flags));
+        }
+        if ((flags & LIST_NAME_ONLY_FLAG) == 0) {
+            node.then(listBooleanFlag("-n", LIST_NAME_ONLY_FLAG, flags));
+        }
+        if ((flags & LIST_SELECTION_FLAG) == 0) {
+            node.then(listBooleanFlag("-s", LIST_SELECTION_FLAG, flags));
+        }
+        return node;
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> listWorldFlag(int flags) {
         RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
             .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
             .suggests(this::suggestWorlds)
-            .executes(this::list)
-            .then(listPageArgument());
-        if (allowIdFilter) {
-            world.then(listIdFilterFlag(false));
-        }
+            .executes(this::list);
+        appendListOptions(world, flags | LIST_WORLD_FLAG);
         return Commands.literal("-w").then(world);
     }
 
-    private LiteralArgumentBuilder<CommandSourceStack> listIdFilterFlag(boolean allowWorld) {
+    private LiteralArgumentBuilder<CommandSourceStack> listIdFilterFlag(int flags) {
         RequiredArgumentBuilder<CommandSourceStack, String> idFilter = Commands
             .argument(LIST_ID_FILTER_ARGUMENT, StringArgumentType.string())
-            .executes(this::list)
-            .then(listPageArgument());
-        if (allowWorld) {
-            idFilter.then(listWorldFlag(false));
-        }
+            .executes(this::list);
+        appendListOptions(idFilter, flags | LIST_ID_FILTER_FLAG);
         return Commands.literal("-i").then(idFilter);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> listPlayerFlag(int flags) {
+        RequiredArgumentBuilder<CommandSourceStack, String> player = Commands
+            .argument(LIST_PLAYER_ARGUMENT, StringArgumentType.word())
+            .suggests((context, builder) -> SharedSuggestionProvider.suggest(
+                context.getSource().getServer().getPlayerNames(),
+                builder
+            ))
+            .executes(this::list);
+        appendListOptions(player, flags | LIST_PLAYER_FLAG);
+        return Commands.literal("-p").then(player);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> listBooleanFlag(String literal, int flag, int flags) {
+        LiteralArgumentBuilder<CommandSourceStack> node = Commands.literal(literal)
+            .executes(this::list);
+        appendListOptions(node, flags | flag);
+        return node;
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, Integer> listPageArgument() {
@@ -355,18 +396,37 @@ public final class WorldGuardCommands {
         return 1;
     }
 
-    private int list(CommandContext<CommandSourceStack> context) {
+    private int list(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ListOptions options = listOptions(context);
-        List<WorldGuardRegion> regions = filterListRegions(listRegions(options.world()), options.idFilter());
+        WorldEditRegionSelection selection = null;
+        if (options.selectionFilter()) {
+            ServerPlayer player = playerOrMessage(context, "Make a complete WorldEdit cuboid or polygonal selection first.");
+            if (player == null) {
+                return 0;
+            }
+            WorldEditSelectionResult result = worldEditSelectionSource.selection(player);
+            if (!result.hasSelection()) {
+                context.getSource().sendSystemMessage(error(result.message()));
+                return 0;
+            }
+            selection = result.selection();
+        }
+        ListPlayerFilter playerFilter = listPlayerFilter(context, options);
+        if (playerFilter.invalid()) {
+            return 0;
+        }
+        List<ListEntry> entries = listEntries(
+            listRegions(options.world()),
+            options.idFilter(),
+            playerFilter.uniqueId(),
+            playerFilter.active(),
+            selection
+        );
         int page = normalizeListPage(options.page());
-        int pageCount = listPageCount(regions.size(), LIST_PAGE_SIZE);
-        context.getSource().sendSystemMessage(header("Regions"));
-        if (regions.isEmpty()) {
-            context.getSource().sendSystemMessage(error(
-                options.idFilter().isBlank()
-                    ? WorldGuardText.noRegionsDefined()
-                    : WorldGuardText.noRegionsMatched(options.idFilter())
-            ));
+        int pageCount = listPageCount(entries.size(), LIST_PAGE_SIZE);
+        context.getSource().sendSystemMessage(header(playerFilter.active() ? "Regions for " + playerFilter.name() : "Regions"));
+        if (entries.isEmpty()) {
+            context.getSource().sendSystemMessage(error(emptyListMessage(options, playerFilter)));
             return 0;
         }
         if (page > pageCount) {
@@ -377,14 +437,22 @@ public final class WorldGuardCommands {
             context.getSource().sendSystemMessage(line("Page", page + "/" + pageCount));
         }
         int firstIndex = (page - 1) * LIST_PAGE_SIZE;
-        List<WorldGuardRegion> pageRegions = listPage(regions, page, LIST_PAGE_SIZE);
+        List<ListEntry> pageRegions = listEntryPage(entries, page, LIST_PAGE_SIZE);
         for (int index = 0; index < pageRegions.size(); index++) {
-            WorldGuardRegion region = pageRegions.get(index);
-            context.getSource().sendSystemMessage(Component.literal((firstIndex + index + 1) + ". ")
-                .withStyle(ChatFormatting.LIGHT_PURPLE)
-                .append(Component.literal(region.id()).withStyle(ChatFormatting.GOLD)));
+            ListEntry entry = pageRegions.get(index);
+            context.getSource().sendSystemMessage(listEntryComponent(firstIndex + index + 1, entry));
         }
         return pageRegions.size();
+    }
+
+    private static String emptyListMessage(ListOptions options, ListPlayerFilter playerFilter) {
+        if (!options.idFilter().isBlank()) {
+            return WorldGuardText.noRegionsMatched(options.idFilter());
+        }
+        if (playerFilter.active()) {
+            return WorldGuardText.noRegionsOwnedBy(playerFilter.name());
+        }
+        return WorldGuardText.noRegionsDefined();
     }
 
     private int infoHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -1450,7 +1518,36 @@ public final class WorldGuardCommands {
             .map(WorldGuardCommands::normalizeListIdFilter)
             .orElse("");
         int page = optionalIntegerArgument(context, LIST_PAGE_ARGUMENT).orElse(1);
-        return new ListOptions(world, idFilter, page);
+        String player = optionalStringArgument(context, LIST_PLAYER_ARGUMENT)
+            .map(String::trim)
+            .orElse("");
+        return new ListOptions(
+            world,
+            idFilter,
+            page,
+            player,
+            hasLiteral(context, "-n"),
+            hasLiteral(context, "-s")
+        );
+    }
+
+    private ListPlayerFilter listPlayerFilter(CommandContext<CommandSourceStack> context, ListOptions options) {
+        if (options.player().isBlank()) {
+            return ListPlayerFilter.none();
+        }
+        if (options.nameOnly()) {
+            return ListPlayerFilter.nameOnly(options.player());
+        }
+        Optional<UUID> explicitUuid = uuidFilter(options.player());
+        if (explicitUuid.isPresent()) {
+            return ListPlayerFilter.uuid(options.player(), explicitUuid.get());
+        }
+        ServerPlayer player = context.getSource().getServer().getPlayerList().getPlayerByName(options.player());
+        if (player == null) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.userDoesNotExist(options.player())));
+            return ListPlayerFilter.invalid(options.player());
+        }
+        return ListPlayerFilter.uuid(options.player(), player.getUUID());
     }
 
     static List<WorldGuardRegion> filterListRegions(List<WorldGuardRegion> regions, String rawIdFilter) {
@@ -1459,8 +1556,38 @@ public final class WorldGuardCommands {
             return List.copyOf(regions);
         }
         return regions.stream()
-            .filter(region -> region.id().contains(idFilter))
+            .filter(region -> matchesListId(region, idFilter))
             .toList();
+    }
+
+    static List<ListEntry> listEntries(
+        List<WorldGuardRegion> regions,
+        String rawIdFilter,
+        UUID playerUuid,
+        boolean playerFilter,
+        WorldEditRegionSelection selection
+    ) {
+        String idFilter = normalizeListIdFilter(rawIdFilter);
+        List<ListEntry> entries = new ArrayList<>();
+        for (WorldGuardRegion region : regions == null ? List.<WorldGuardRegion>of() : regions) {
+            if (!matchesListId(region, idFilter)) {
+                continue;
+            }
+            if (selection != null && !region.global() && !intersectsSelection(region, selection)) {
+                continue;
+            }
+            ListRelationship relationship = relationship(region, playerUuid);
+            if (playerFilter && relationship == ListRelationship.NONE) {
+                continue;
+            }
+            entries.add(new ListEntry(region, relationship));
+        }
+        if (playerFilter) {
+            entries.sort(Comparator
+                .comparingInt((ListEntry entry) -> entry.relationship().sortOrder())
+                .thenComparing(entry -> entry.region().id(), String.CASE_INSENSITIVE_ORDER));
+        }
+        return List.copyOf(entries);
     }
 
     static List<WorldGuardRegion> listPage(List<WorldGuardRegion> regions, int rawPage, int pageSize) {
@@ -1471,6 +1598,16 @@ public final class WorldGuardCommands {
         }
         int lastIndex = Math.min(firstIndex + pageSize, regions.size());
         return List.copyOf(regions.subList(firstIndex, lastIndex));
+    }
+
+    static List<ListEntry> listEntryPage(List<ListEntry> entries, int rawPage, int pageSize) {
+        int page = normalizeListPage(rawPage);
+        int firstIndex = (page - 1) * pageSize;
+        if (firstIndex >= entries.size()) {
+            return List.of();
+        }
+        int lastIndex = Math.min(firstIndex + pageSize, entries.size());
+        return List.copyOf(entries.subList(firstIndex, lastIndex));
     }
 
     static int listPageCount(int total, int pageSize) {
@@ -1486,6 +1623,179 @@ public final class WorldGuardCommands {
 
     static String normalizeListIdFilter(String rawIdFilter) {
         return rawIdFilter == null ? "" : rawIdFilter.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matchesListId(WorldGuardRegion region, String idFilter) {
+        return idFilter.isBlank() || region.id().toLowerCase(Locale.ROOT).contains(idFilter);
+    }
+
+    private static Optional<UUID> uuidFilter(String raw) {
+        String uuid = uuidName(raw);
+        if (uuid.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UUID.fromString(uuid));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private static boolean hasLiteral(CommandContext<CommandSourceStack> context, String literal) {
+        for (ParsedCommandNode<CommandSourceStack> node : context.getNodes()) {
+            if (node.getNode().getName().equals(literal)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ListRelationship relationship(WorldGuardRegion region, UUID playerUuid) {
+        if (playerUuid == null) {
+            return ListRelationship.NONE;
+        }
+        if (region.owner(playerUuid)) {
+            return ListRelationship.OWNER;
+        }
+        if (region.members().contains(playerUuid)) {
+            return ListRelationship.MEMBER;
+        }
+        return ListRelationship.NONE;
+    }
+
+    private static Component listEntryComponent(int number, ListEntry entry) {
+        Component component = Component.literal(number + ".")
+            .withStyle(ChatFormatting.LIGHT_PURPLE);
+        if (entry.relationship() == ListRelationship.OWNER) {
+            component = component.copy()
+                .append(Component.literal(" +").withStyle(ChatFormatting.DARK_AQUA));
+        } else if (entry.relationship() == ListRelationship.MEMBER) {
+            component = component.copy()
+                .append(Component.literal(" -").withStyle(ChatFormatting.AQUA));
+        }
+        return component.copy()
+            .append(Component.literal(" "))
+            .append(Component.literal(entry.region().id()).withStyle(ChatFormatting.GOLD));
+    }
+
+    static boolean intersectsSelection(WorldGuardRegion region, WorldEditRegionSelection selection) {
+        return intersects(region, selection.toDefaultProtectedRegion("tmp", 0));
+    }
+
+    static boolean intersects(WorldGuardRegion first, WorldGuardRegion second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        if (first.global() || second.global()) {
+            return true;
+        }
+        if (!worldsOverlap(first, second)
+            || !first.type().physicalArea()
+            || !second.type().physicalArea()
+            || first.minY() > second.maxY()
+            || second.minY() > first.maxY()
+            || first.minX() > second.maxX()
+            || second.minX() > first.maxX()
+            || first.minZ() > second.maxZ()
+            || second.minZ() > first.maxZ()) {
+            return false;
+        }
+        if (first.type() == com.vantablack4.worldguard.model.RegionType.CUBOID
+            && second.type() == com.vantablack4.worldguard.model.RegionType.CUBOID) {
+            return true;
+        }
+        return footprintsIntersect(first, second);
+    }
+
+    private static boolean worldsOverlap(WorldGuardRegion first, WorldGuardRegion second) {
+        return first.world().equals(WorldGuardRegion.ANY_WORLD)
+            || second.world().equals(WorldGuardRegion.ANY_WORLD)
+            || first.world().equals(second.world());
+    }
+
+    private static boolean footprintsIntersect(WorldGuardRegion first, WorldGuardRegion second) {
+        String world = !first.world().equals(WorldGuardRegion.ANY_WORLD)
+            ? first.world()
+            : (!second.world().equals(WorldGuardRegion.ANY_WORLD) ? second.world() : "minecraft:overworld");
+        int y = Math.max(first.minY(), second.minY());
+        List<FootprintPoint> firstPoints = footprintPoints(first);
+        List<FootprintPoint> secondPoints = footprintPoints(second);
+        for (FootprintPoint point : firstPoints) {
+            if (second.contains(world, point.x(), y, point.z())) {
+                return true;
+            }
+        }
+        for (FootprintPoint point : secondPoints) {
+            if (first.contains(world, point.x(), y, point.z())) {
+                return true;
+            }
+        }
+        for (int firstIndex = 0; firstIndex < firstPoints.size(); firstIndex++) {
+            FootprintPoint firstStart = firstPoints.get(firstIndex);
+            FootprintPoint firstEnd = firstPoints.get((firstIndex + 1) % firstPoints.size());
+            for (int secondIndex = 0; secondIndex < secondPoints.size(); secondIndex++) {
+                FootprintPoint secondStart = secondPoints.get(secondIndex);
+                FootprintPoint secondEnd = secondPoints.get((secondIndex + 1) % secondPoints.size());
+                if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static List<FootprintPoint> footprintPoints(WorldGuardRegion region) {
+        if (region.type() == com.vantablack4.worldguard.model.RegionType.POLYGON) {
+            return region.polygonPoints().stream()
+                .map(point -> new FootprintPoint(point.x(), point.z()))
+                .toList();
+        }
+        return List.of(
+            new FootprintPoint(region.minX(), region.minZ()),
+            new FootprintPoint(region.maxX(), region.minZ()),
+            new FootprintPoint(region.maxX(), region.maxZ()),
+            new FootprintPoint(region.minX(), region.maxZ())
+        );
+    }
+
+    private static boolean segmentsIntersect(
+        FootprintPoint firstStart,
+        FootprintPoint firstEnd,
+        FootprintPoint secondStart,
+        FootprintPoint secondEnd
+    ) {
+        long firstOrientation = orientation(firstStart, firstEnd, secondStart);
+        long secondOrientation = orientation(firstStart, firstEnd, secondEnd);
+        long thirdOrientation = orientation(secondStart, secondEnd, firstStart);
+        long fourthOrientation = orientation(secondStart, secondEnd, firstEnd);
+
+        if (firstOrientation == 0 && onSegment(firstStart, secondStart, firstEnd)) {
+            return true;
+        }
+        if (secondOrientation == 0 && onSegment(firstStart, secondEnd, firstEnd)) {
+            return true;
+        }
+        if (thirdOrientation == 0 && onSegment(secondStart, firstStart, secondEnd)) {
+            return true;
+        }
+        if (fourthOrientation == 0 && onSegment(secondStart, firstEnd, secondEnd)) {
+            return true;
+        }
+
+        return (firstOrientation > 0) != (secondOrientation > 0)
+            && (thirdOrientation > 0) != (fourthOrientation > 0);
+    }
+
+    private static long orientation(FootprintPoint start, FootprintPoint end, FootprintPoint point) {
+        return (long) (end.x() - start.x()) * (point.z() - start.z())
+            - (long) (end.z() - start.z()) * (point.x() - start.x());
+    }
+
+    private static boolean onSegment(FootprintPoint start, FootprintPoint point, FootprintPoint end) {
+        return point.x() >= Math.min(start.x(), end.x())
+            && point.x() <= Math.max(start.x(), end.x())
+            && point.z() >= Math.min(start.z(), end.z())
+            && point.z() <= Math.max(start.z(), end.z());
     }
 
     private ServerPlayer playerOrMessage(CommandContext<CommandSourceStack> context, String message) throws CommandSyntaxException {
@@ -1711,7 +2021,54 @@ public final class WorldGuardCommands {
         return Component.literal(text).withStyle(ChatFormatting.RED);
     }
 
-    private record ListOptions(String world, String idFilter, int page) {
+    record ListEntry(WorldGuardRegion region, ListRelationship relationship) {
+    }
+
+    record ListPlayerFilter(String name, UUID uniqueId, boolean active, boolean invalid) {
+        static ListPlayerFilter none() {
+            return new ListPlayerFilter("", null, false, false);
+        }
+
+        static ListPlayerFilter uuid(String name, UUID uniqueId) {
+            return new ListPlayerFilter(name, uniqueId, true, false);
+        }
+
+        static ListPlayerFilter nameOnly(String name) {
+            return new ListPlayerFilter(name, null, true, false);
+        }
+
+        static ListPlayerFilter invalid(String name) {
+            return new ListPlayerFilter(name, null, true, true);
+        }
+    }
+
+    enum ListRelationship {
+        OWNER(0),
+        MEMBER(1),
+        NONE(2);
+
+        private final int sortOrder;
+
+        ListRelationship(int sortOrder) {
+            this.sortOrder = sortOrder;
+        }
+
+        int sortOrder() {
+            return sortOrder;
+        }
+    }
+
+    private record FootprintPoint(int x, int z) {
+    }
+
+    private record ListOptions(
+        String world,
+        String idFilter,
+        int page,
+        String player,
+        boolean nameOnly,
+        boolean selectionFilter
+    ) {
     }
 
     private record DomainArgument(UUID playerUuid, String group) {

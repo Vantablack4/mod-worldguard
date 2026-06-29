@@ -23,6 +23,8 @@ final class WorldGuardTextTests {
             .isEqualTo("No regions are defined.");
         assertThat(WorldGuardText.noRegionsMatched("spawn"))
             .isEqualTo("No regions matched the id search 'spawn'.");
+        assertThat(WorldGuardText.noRegionsOwnedBy("Steve"))
+            .isEqualTo("No regions could be found for 'Steve'.");
         assertThat(WorldGuardText.invalidListPage(3, 2))
             .isEqualTo("Page 3 is not valid. Available pages: 1-2.");
         assertThat(WorldGuardText.createdRegion("spawn"))
@@ -50,6 +52,8 @@ final class WorldGuardTextTests {
             .isEqualTo("Region selected as cuboid");
         assertThat(WorldGuardText.worldNotLoaded("minecraft:missing"))
             .isEqualTo("World 'minecraft:missing' is not loaded.");
+        assertThat(WorldGuardText.userDoesNotExist("Steve"))
+            .isEqualTo("A user by the name of 'Steve' does not seem to exist.");
         assertThat(WorldGuardText.unknownFlag("badflag"))
             .isEqualTo("Unknown flag specified: badflag");
         assertThat(WorldGuardText.invalidStateFlag("maybe"))
@@ -98,6 +102,10 @@ final class WorldGuardTextTests {
             .isEqualTo("Hey! Sorry, but you can't open that here.");
         assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.PVP).message())
             .isEqualTo("Hey! Sorry, but you can't PvP here.");
+        assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.VEHICLE_PLACE).message())
+            .isEqualTo("Hey! Sorry, but you can't place vehicles here.");
+        assertThat(ProtectionDecision.deny("spawn", WorldGuardFlag.VEHICLE_DESTROY).message())
+            .isEqualTo("Hey! Sorry, but you can't break vehicles here.");
     }
 
     @Test

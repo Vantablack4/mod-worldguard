@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.util.List;
+import java.util.UUID;
 import java.nio.file.Path;
 
 final class WorldGuardCommandsTests {
@@ -57,8 +58,17 @@ final class WorldGuardCommandsTests {
             assertThat(list.getChild("-w").getChild("world")).isNotNull();
             assertThat(list.getChild("-w").getChild("world").getChild("page")).isNotNull();
             assertThat(list.getChild("-w").getChild("world").getChild("-i").getChild("idSearch")).isNotNull();
-            assertThat(list.getChild("-p")).isNull();
-            assertThat(list.getChild("-n")).isNull();
+            assertThat(list.getChild("-p").getChild("owner")).isNotNull();
+            assertThat(list.getChild("-p").getChild("owner").getChild("page")).isNotNull();
+            assertThat(list.getChild("-p").getChild("owner").getChild("-n")).isNotNull();
+            assertThat(list.getChild("-p").getChild("owner").getChild("-s")).isNotNull();
+            assertThat(list.getChild("-p").getChild("owner").getChild("-i").getChild("idSearch")).isNotNull();
+            assertThat(list.getChild("-p").getChild("owner").getChild("-w").getChild("world")).isNotNull();
+            assertThat(list.getChild("-w").getChild("world").getChild("-p").getChild("owner")).isNotNull();
+            assertThat(list.getChild("-n")).isNotNull();
+            assertThat(list.getChild("-n").getChild("-p").getChild("owner")).isNotNull();
+            assertThat(list.getChild("-s")).isNotNull();
+            assertThat(list.getChild("-s").getChild("-i").getChild("idSearch")).isNotNull();
             assertThat(root.getChild("define")).isNotNull();
             assertThat(root.getChild("def")).isNotNull();
             assertThat(root.getChild("d")).isNotNull();
@@ -138,6 +148,71 @@ final class WorldGuardCommandsTests {
             .containsExactly("r9");
         assertThat(WorldGuardCommands.listPage(pagedRegions, 3, WorldGuardCommands.LIST_PAGE_SIZE))
             .isEmpty();
+    }
+
+    @Test
+    void listEntriesFilterPlayerDomainsAndSortOwnersBeforeMembers() {
+        UUID player = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID other = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        List<WorldGuardRegion> regions = List.of(
+            region("z_member").withMember(player),
+            region("unrelated"),
+            region("m_owner").withOwner(player),
+            WorldGuardRegion.global("minecraft:overworld").withOwner(player),
+            region("a_member").withMember(player),
+            region("other_owner").withOwner(other)
+        );
+
+        List<WorldGuardCommands.ListEntry> entries = WorldGuardCommands.listEntries(regions, "", player, true, null);
+
+        assertThat(entries)
+            .extracting(entry -> entry.region().id())
+            .containsExactly("__global__", "m_owner", "a_member", "z_member");
+        assertThat(entries)
+            .extracting(WorldGuardCommands.ListEntry::relationship)
+            .containsExactly(
+                WorldGuardCommands.ListRelationship.OWNER,
+                WorldGuardCommands.ListRelationship.OWNER,
+                WorldGuardCommands.ListRelationship.MEMBER,
+                WorldGuardCommands.ListRelationship.MEMBER
+            );
+
+        assertThat(WorldGuardCommands.listEntries(regions, "member", player, true, null))
+            .extracting(entry -> entry.region().id())
+            .containsExactly("a_member", "z_member");
+    }
+
+    @Test
+    void listEntriesTreatNameOnlyPlayerFilterAsUnmatchedWithoutLegacyNameDomains() {
+        UUID player = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        List<WorldGuardRegion> regions = List.of(region("spawn").withOwner(player));
+
+        assertThat(WorldGuardCommands.listEntries(regions, "", null, true, null))
+            .isEmpty();
+    }
+
+    @Test
+    void listEntriesFilterByWorldEditSelectionIntersectionAndKeepGlobal() {
+        WorldEditRegionSelection selection = new WorldEditRegionSelection(
+            "minecraft:overworld",
+            5,
+            0,
+            5,
+            15,
+            10,
+            15
+        );
+        List<WorldGuardRegion> regions = List.of(
+            WorldGuardRegion.global("minecraft:overworld"),
+            region("inside", 6, 0, 6, 8, 4, 8),
+            region("touching", 15, 0, 15, 18, 4, 18),
+            region("outside", 20, 0, 20, 24, 4, 24),
+            region("other_world", "minecraft:the_nether", 6, 0, 6, 8, 4, 8)
+        );
+
+        assertThat(WorldGuardCommands.listEntries(regions, "", null, false, selection))
+            .extracting(entry -> entry.region().id())
+            .containsExactly("__global__", "inside", "touching");
     }
 
     @Test
@@ -292,6 +367,23 @@ final class WorldGuardCommandsTests {
 
     private static WorldGuardRegion region(String id) {
         return WorldGuardRegion.defaultProtected(id, "minecraft:overworld", 0, 0, 0, 1, 1, 1, 0);
+    }
+
+    private static WorldGuardRegion region(String id, int x1, int y1, int z1, int x2, int y2, int z2) {
+        return region(id, "minecraft:overworld", x1, y1, z1, x2, y2, z2);
+    }
+
+    private static WorldGuardRegion region(
+        String id,
+        String world,
+        int x1,
+        int y1,
+        int z1,
+        int x2,
+        int y2,
+        int z2
+    ) {
+        return WorldGuardRegion.defaultProtected(id, world, x1, y1, z1, x2, y2, z2, 0);
     }
 
     private static WorldEditSelectionSource unavailableWorldEdit() {

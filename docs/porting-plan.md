@@ -35,8 +35,9 @@ and server-event behavior needed by the Vantablack server.
   Ender Dragon and Wither block damage,
   movement entry/exit, portal and teleport entry/exit, ender pearl and chorus
   use, chat send, sleep, PvP, fall damage, invincibility, item drop, item
-  pickup, item frame rotation, trampling, redstone triggers, hoppers, lightning,
-  snow/ice weather, melt, growth, spread, decay, and fade mutations.
+  pickup, vehicle placement/destruction, item frame rotation, trampling, redstone triggers, hoppers, lightning,
+  snow/ice weather, melt, growth, sapling/tree feature growth, spread, decay,
+  and fade mutations.
 - Typed `/rg flag` values and `-g` region-group targeting for state and typed
   flags.
 - Runtime typed flag effects for greeting/farewell messages, custom deny
@@ -52,10 +53,7 @@ Full WorldGuard behavior is mostly event coverage and cache design:
   or entity rules.
 - Replace the Fabric-native group-permission bridge with direct LuckPerms group
   lookup if Vantablack adopts LuckPerms as a hard dependency.
-- Add recipient filtering for `receive-chat`.
-- Add remaining environmental hooks for sapling/tree feature growth.
 - Continue command parity work for remaining upstream flags/options, including
-  region list owner/name-domain/selection filters (`-p`, `-n`, `-s`) and
   `/region info` options.
 - Add migration tooling if Vantablack later chooses to reuse LGPL
   `worldguard-core` storage directly instead of the Fabric-native storage model.
