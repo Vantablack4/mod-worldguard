@@ -68,8 +68,7 @@ Not included yet:
 - Full WorldGuard Bukkit API compatibility.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags,
-  including `/region info -u/-s`, WorldEdit define/claim `-w` forms, and
-  free-order switch parsing.
+  including WorldEdit define/claim `-w` forms and free-order switch parsing.
 - Dispenser/dropper synthetic action simulation, lectern book-take protection,
   entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
   and mount/dismount mixin parity beyond the current direct-use ride checks.
@@ -86,8 +85,13 @@ Not included yet:
 /region list -w <world> [-i <id-search>] [-p <player>] [-n] [-s] [page]
 /region list -p <player> [-n] [-s] [-i <id-search>] [-w <world>] [page]
 /region info [region]
+/region info -u [region]
+/region info -s [region]
 /region info -w <world> <region>
+/region info -w <world> [-u] [-s] <region>
 /region i [region]
+/region i -u [region]
+/region i -s [region]
 /region define <region>
 /region define <region> selection [priority]
 /region define <region> <x1> <y1> <z1> <x2> <y2> <z2> [priority]

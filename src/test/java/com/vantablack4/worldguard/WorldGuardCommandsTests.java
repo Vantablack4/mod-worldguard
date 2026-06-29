@@ -13,13 +13,19 @@ import com.vantablack4.worldguard.flag.WorldGuardRegionGroup;
 import com.vantablack4.worldguard.flag.WorldGuardValueFlag;
 
 import net.minecraft.SharedConstants;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.PermissionSet;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.nio.file.Path;
@@ -111,6 +117,25 @@ final class WorldGuardCommandsTests {
                 .isNotNull();
             assertThat(root.getChild("i").getChild("-w").getChild("world").getChild("region"))
                 .isNotNull();
+            for (String alias : List.of("info", "i")) {
+                CommandNode<CommandSourceStack> info = root.getChild(alias);
+                assertThat(info.getChild("-u").getChild("region")).as(alias + " -u").isNotNull();
+                assertThat(info.getChild("-s").getChild("region")).as(alias + " -s").isNotNull();
+                assertThat(info.getChild("region").getChild("-u")).as(alias + " region -u").isNotNull();
+                assertThat(info.getChild("region").getChild("-s")).as(alias + " region -s").isNotNull();
+                assertThat(info.getChild("-w").getChild("world").getChild("-u").getChild("region"))
+                    .as(alias + " -w -u")
+                    .isNotNull();
+                assertThat(info.getChild("-w").getChild("world").getChild("region").getChild("-u"))
+                    .as(alias + " -w region -u")
+                    .isNotNull();
+                assertThat(info.getChild("-u").getChild("-s").getChild("region"))
+                    .as(alias + " -u -s")
+                    .isNotNull();
+                assertThat(info.getChild("region").getChild("-u").getChild("-s"))
+                    .as(alias + " region -u -s")
+                    .isNotNull();
+            }
             assertThat(root.getChild("flags").getChild("-w").getChild("world").getChild("region"))
                 .isNotNull();
             assertThat(root.getChild("flags").getChild("-p").getChild("page").getChild("region"))
@@ -163,6 +188,47 @@ final class WorldGuardCommandsTests {
                     .isNotNull();
             }
         }
+    }
+
+    @Test
+    void infoTrailingRegionOptionsExecuteAgainstNamedRegion() throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
+        WorldGuardStorage storage = WorldGuardStorage.load(tempDir);
+        storage.save(WorldGuardRegion.defaultProtected(
+            "spawn",
+            "minecraft:overworld",
+            0,
+            0,
+            0,
+            10,
+            10,
+            10,
+            3
+        ));
+        storage.save(WorldGuardRegion.global("minecraft:overworld")
+            .withFlag(WorldGuardFlag.PVP, FlagState.DENY));
+        WorldGuardCommands commands = new WorldGuardCommands(
+            new WorldGuardConfig(tempDir, 2, 1000),
+            storage,
+            unavailableWorldEdit()
+        );
+        RecordingCommandSource source = new RecordingCommandSource();
+        commands.register(dispatcher);
+
+        int result = dispatcher.execute(
+            "rg info -w world spawn -u",
+            commandSource(source)
+        );
+
+        assertThat(result).isEqualTo(1);
+        assertThat(source.messages())
+            .anyMatch(message -> message.contains("Region") && message.contains("spawn (type=cuboid, priority=3)"));
+        assertThat(source.messages())
+            .anyMatch(message -> message.contains("Owner UUIDs"));
+        assertThat(source.messages())
+            .noneMatch(message -> message.contains("__global__"));
     }
 
     @Test
@@ -487,6 +553,48 @@ final class WorldGuardCommandsTests {
         int z2
     ) {
         return WorldGuardRegion.defaultProtected(id, world, x1, y1, z1, x2, y2, z2, 0);
+    }
+
+    private static CommandSourceStack commandSource(CommandSource source) {
+        return new CommandSourceStack(
+            source,
+            Vec3.ZERO,
+            Vec2.ZERO,
+            null,
+            PermissionSet.ALL_PERMISSIONS,
+            "test",
+            Component.literal("test"),
+            null,
+            null
+        );
+    }
+
+    private static final class RecordingCommandSource implements CommandSource {
+        private final List<String> messages = new ArrayList<>();
+
+        @Override
+        public void sendSystemMessage(Component component) {
+            messages.add(component.getString());
+        }
+
+        @Override
+        public boolean acceptsSuccess() {
+            return true;
+        }
+
+        @Override
+        public boolean acceptsFailure() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldInformAdmins() {
+            return false;
+        }
+
+        List<String> messages() {
+            return List.copyOf(messages);
+        }
     }
 
     private static WorldEditSelectionSource unavailableWorldEdit() {

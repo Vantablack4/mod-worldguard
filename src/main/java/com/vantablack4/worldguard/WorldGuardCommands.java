@@ -74,6 +74,8 @@ public final class WorldGuardCommands {
     private static final int LIST_PLAYER_FLAG = 1 << 2;
     private static final int LIST_NAME_ONLY_FLAG = 1 << 3;
     private static final int LIST_SELECTION_FLAG = 1 << 4;
+    private static final int INFO_UUID_FLAG = 1;
+    private static final int INFO_SELECT_FLAG = 1 << 1;
     private static final List<String> REGION_GROUP_IDS = List.of(
         "members",
         "member",
@@ -157,14 +159,8 @@ public final class WorldGuardCommands {
                 .requires(source -> mayRegion(source, "load"))
                 .executes(this::loadRegions))
             .then(listArguments())
-            .then(Commands.literal("info")
-                .executes(this::infoHere)
-                .then(regionArgument().executes(this::info))
-                .then(worldFlag(regionArgument().executes(this::info))))
-            .then(Commands.literal("i")
-                .executes(this::infoHere)
-                .then(regionArgument().executes(this::info))
-                .then(worldFlag(regionArgument().executes(this::info))))
+            .then(infoCommand("info"))
+            .then(infoCommand("i"))
             .then(Commands.literal("define")
                 .requires(source -> mayRegion(source, "define"))
                 .then(defineArguments()))
@@ -481,7 +477,7 @@ public final class WorldGuardCommands {
         return WorldGuardText.noRegionsDefined();
     }
 
-    private int infoHere(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private int infoHere(CommandContext<CommandSourceStack> context, int options) throws CommandSyntaxException {
         ServerPlayer player = playerOrMessage(context, WorldGuardText.specifyInfoRegion());
         if (player == null) {
             return 0;
@@ -494,22 +490,36 @@ public final class WorldGuardCommands {
         );
         if (regions.isEmpty()) {
             WorldGuardRegion global = storage.findOrCreateGlobal(worldId(player));
-            return sendInfo(context, global);
+            return sendInfo(context, global, options);
         }
         if (regions.size() > 1) {
             context.getSource().sendSystemMessage(error(WorldGuardText.multipleStandingRegions()));
             return 0;
         }
-        return sendInfo(context, regions.getFirst());
+        return sendInfo(context, regions.getFirst(), options);
     }
 
-    private int info(CommandContext<CommandSourceStack> context) {
+    private int info(CommandContext<CommandSourceStack> context, int options) {
         return findExistingRegion(context, getString(context, ID_ARGUMENT), true)
-            .map(region -> sendInfo(context, region))
+            .map(region -> sendInfo(context, region, options))
             .orElse(0);
     }
 
-    private int sendInfo(CommandContext<CommandSourceStack> context, WorldGuardRegion region) {
+    private int sendInfo(CommandContext<CommandSourceStack> context, WorldGuardRegion region, int options) {
+        if ((options & INFO_SELECT_FLAG) != 0) {
+            ServerPlayer player;
+            try {
+                player = context.getSource().getPlayerOrException();
+            } catch (CommandSyntaxException exception) {
+                context.getSource().sendSystemMessage(error("This command can only be used by a player."));
+                return 0;
+            }
+            WorldEditSelectionWriteResult result = worldEditSelectionSource.selectRegion(player, region);
+            if (!result.selected()) {
+                context.getSource().sendSystemMessage(error(result.message()));
+                return 0;
+            }
+        }
         context.getSource().sendSystemMessage(header("Region Info"));
         context.getSource().sendSystemMessage(line(
             "Region",
@@ -518,6 +528,10 @@ public final class WorldGuardCommands {
         context.getSource().sendSystemMessage(line("Flags", flagsDisplay(region)));
         context.getSource().sendSystemMessage(line("Owners", Integer.toString(region.owners().size())));
         context.getSource().sendSystemMessage(line("Members", Integer.toString(region.members().size())));
+        if ((options & INFO_UUID_FLAG) != 0) {
+            context.getSource().sendSystemMessage(line("Owner UUIDs", uuidDisplay(region.owners())));
+            context.getSource().sendSystemMessage(line("Member UUIDs", uuidDisplay(region.members())));
+        }
         context.getSource().sendSystemMessage(line("Bounds", region.boundsDisplay()));
         if (!region.parentId().isBlank()) {
             context.getSource().sendSystemMessage(line("Parent", region.parentId()));
@@ -1309,6 +1323,69 @@ public final class WorldGuardCommands {
                 .then(worldFlag(regionArgument().executes(context -> teleport(context, TeleportMode.CENTER)))));
     }
 
+    private LiteralArgumentBuilder<CommandSourceStack> infoCommand(String name) {
+        return Commands.literal(name)
+            .executes(context -> infoHere(context, 0))
+            .then(infoRegionArgument(0))
+            .then(infoOptionFlag("-u", INFO_UUID_FLAG, 0))
+            .then(infoOptionFlag("-s", INFO_SELECT_FLAG, 0))
+            .then(infoWorldFlag(0));
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> infoRegionArgument(int options) {
+        RequiredArgumentBuilder<CommandSourceStack, String> region = regionArgument()
+            .executes(context -> info(context, options));
+        if ((options & INFO_UUID_FLAG) == 0) {
+            region.then(infoRegionOptionFlag("-u", INFO_UUID_FLAG, options));
+        }
+        if ((options & INFO_SELECT_FLAG) == 0) {
+            region.then(infoRegionOptionFlag("-s", INFO_SELECT_FLAG, options));
+        }
+        return region;
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> infoRegionOptionFlag(String name, int option, int options) {
+        int updated = options | option;
+        LiteralArgumentBuilder<CommandSourceStack> flag = Commands.literal(name)
+            .executes(context -> info(context, updated));
+        if ((updated & INFO_UUID_FLAG) == 0) {
+            flag.then(infoRegionOptionFlag("-u", INFO_UUID_FLAG, updated));
+        }
+        if ((updated & INFO_SELECT_FLAG) == 0) {
+            flag.then(infoRegionOptionFlag("-s", INFO_SELECT_FLAG, updated));
+        }
+        return flag;
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> infoOptionFlag(String name, int option, int options) {
+        int updated = options | option;
+        LiteralArgumentBuilder<CommandSourceStack> flag = Commands.literal(name)
+            .executes(context -> infoHere(context, updated))
+            .then(infoRegionArgument(updated))
+            .then(infoWorldFlag(updated));
+        if ((updated & INFO_UUID_FLAG) == 0) {
+            flag.then(infoOptionFlag("-u", INFO_UUID_FLAG, updated));
+        }
+        if ((updated & INFO_SELECT_FLAG) == 0) {
+            flag.then(infoOptionFlag("-s", INFO_SELECT_FLAG, updated));
+        }
+        return flag;
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> infoWorldFlag(int options) {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
+            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+            .suggests(this::suggestWorlds);
+        world.then(infoRegionArgument(options));
+        if ((options & INFO_UUID_FLAG) == 0) {
+            world.then(infoOptionFlag("-u", INFO_UUID_FLAG, options));
+        }
+        if ((options & INFO_SELECT_FLAG) == 0) {
+            world.then(infoOptionFlag("-s", INFO_SELECT_FLAG, options));
+        }
+        return Commands.literal("-w").then(world);
+    }
+
     private LiteralArgumentBuilder<CommandSourceStack> removeCommand(String name) {
         return Commands.literal(name)
             .requires(source -> mayRegion(source, "remove"))
@@ -2075,6 +2152,16 @@ public final class WorldGuardCommands {
         }
         String display = flags.toString();
         return display.isBlank() ? "(none)" : display;
+    }
+
+    private static String uuidDisplay(Set<UUID> uuids) {
+        if (uuids == null || uuids.isEmpty()) {
+            return "(none)";
+        }
+        return uuids.stream()
+            .map(UUID::toString)
+            .sorted(String.CASE_INSENSITIVE_ORDER)
+            .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private static String worldId(ServerPlayer player) {
