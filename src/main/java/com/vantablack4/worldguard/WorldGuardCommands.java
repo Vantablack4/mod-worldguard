@@ -213,10 +213,7 @@ public final class WorldGuardCommands {
             .then(removeCommand("rem"))
             .then(teleportCommand("teleport"))
             .then(teleportCommand("tp"))
-            .then(Commands.literal("flags")
-                .executes(this::flagsHere)
-                .then(regionArgument().executes(this::regionFlags))
-                .then(worldFlag(regionArgument().executes(this::regionFlags))))
+            .then(flagsCommand())
             .then(Commands.literal("flag")
                 .requires(source -> mayRegion(source, "flag.regions"))
                 .then(flagArguments())
@@ -767,27 +764,39 @@ public final class WorldGuardCommands {
             player.blockPosition().getZ()
         );
         if (regions.isEmpty()) {
-            return sendRegionFlags(context, storage.findOrCreateGlobal(worldId(player)));
+            return sendRegionFlags(context, storage.findOrCreateGlobal(worldId(player)), flagsPage(context));
         }
         if (regions.size() > 1) {
             context.getSource().sendSystemMessage(error(WorldGuardText.multipleStandingRegions()));
             return 0;
         }
-        return sendRegionFlags(context, regions.getFirst());
+        return sendRegionFlags(context, regions.getFirst(), flagsPage(context));
     }
 
     private int regionFlags(CommandContext<CommandSourceStack> context) {
         return findExistingRegion(context, getString(context, ID_ARGUMENT), true)
-            .map(region -> sendRegionFlags(context, region))
+            .map(region -> sendRegionFlags(context, region, flagsPage(context)))
             .orElse(0);
     }
 
-    private int sendRegionFlags(CommandContext<CommandSourceStack> context, WorldGuardRegion region) {
-        context.getSource().sendSystemMessage(header("Flags for " + region.id()));
-        for (WorldGuardFlag flag : WorldGuardFlag.values()) {
-            context.getSource().sendSystemMessage(line(flag.id(), region.flag(flag).id()));
+    private int sendRegionFlags(CommandContext<CommandSourceStack> context, WorldGuardRegion region, int rawPage) {
+        List<FlagListEntry> entries = flagListEntries(region);
+        int page = normalizeListPage(rawPage);
+        int pageCount = listPageCount(entries.size(), LIST_PAGE_SIZE);
+        if (page > pageCount) {
+            context.getSource().sendSystemMessage(error(WorldGuardText.invalidListPage(page, pageCount)));
+            return 0;
+        }
+
+        context.getSource().sendSystemMessage(header("Flags for " + region.id() + " (page " + page + "/" + pageCount + ")"));
+        for (FlagListEntry entry : flagListPage(entries, page, LIST_PAGE_SIZE)) {
+            context.getSource().sendSystemMessage(line(entry.id(), entry.value()));
         }
         return 1;
+    }
+
+    private int flagsPage(CommandContext<CommandSourceStack> context) {
+        return optionalIntegerArgument(context, LIST_PAGE_ARGUMENT).orElse(1);
     }
 
     private int setFlag(CommandContext<CommandSourceStack> context) {
@@ -1296,6 +1305,38 @@ public final class WorldGuardCommands {
             .then(worldRemoveFlag());
     }
 
+    private LiteralArgumentBuilder<CommandSourceStack> flagsCommand() {
+        return Commands.literal("flags")
+            .executes(this::flagsHere)
+            .then(flagsRegionArgument())
+            .then(flagsPageFlag())
+            .then(flagsWorldFlag());
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, String> flagsRegionArgument() {
+        return regionArgument().executes(this::regionFlags);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> flagsPageFlag() {
+        RequiredArgumentBuilder<CommandSourceStack, Integer> page = Commands
+            .argument(LIST_PAGE_ARGUMENT, IntegerArgumentType.integer(1))
+            .executes(this::flagsHere)
+            .then(flagsRegionArgument())
+            .then(worldFlag(flagsRegionArgument()));
+        return Commands.literal("-p").then(page);
+    }
+
+    private LiteralArgumentBuilder<CommandSourceStack> flagsWorldFlag() {
+        RequiredArgumentBuilder<CommandSourceStack, String> world = Commands
+            .argument(LIST_WORLD_ARGUMENT, StringArgumentType.string())
+            .suggests(this::suggestWorlds);
+        world.then(flagsRegionArgument());
+        world.then(Commands.literal("-p")
+            .then(Commands.argument(LIST_PAGE_ARGUMENT, IntegerArgumentType.integer(1))
+                .then(flagsRegionArgument())));
+        return Commands.literal("-w").then(world);
+    }
+
     private RequiredArgumentBuilder<CommandSourceStack, String> removeRegionArgument(RemoveMode mode) {
         return regionArgument().executes(context -> delete(context, mode));
     }
@@ -1717,6 +1758,33 @@ public final class WorldGuardCommands {
         return List.copyOf(entries.subList(firstIndex, lastIndex));
     }
 
+    static List<FlagListEntry> flagListEntries(WorldGuardRegion region) {
+        if (region == null) {
+            return List.of();
+        }
+        List<FlagListEntry> entries = new ArrayList<>();
+        for (WorldGuardFlag flag : WorldGuardFlag.values()) {
+            entries.add(new FlagListEntry(flag.id(), region.flag(flag).id()));
+        }
+        for (WorldGuardValueFlag flag : WorldGuardValueFlag.values()) {
+            String value = region.value(flag)
+                .map(WorldGuardFlagValue::serialized)
+                .orElse("unset");
+            entries.add(new FlagListEntry(flag.id(), value));
+        }
+        return List.copyOf(entries);
+    }
+
+    static List<FlagListEntry> flagListPage(List<FlagListEntry> entries, int rawPage, int pageSize) {
+        int page = normalizeListPage(rawPage);
+        int firstIndex = (page - 1) * pageSize;
+        if (firstIndex >= entries.size()) {
+            return List.of();
+        }
+        int lastIndex = Math.min(firstIndex + pageSize, entries.size());
+        return List.copyOf(entries.subList(firstIndex, lastIndex));
+    }
+
     static int listPageCount(int total, int pageSize) {
         if (total <= 0) {
             return 1;
@@ -2129,6 +2197,9 @@ public final class WorldGuardCommands {
     }
 
     record ListEntry(WorldGuardRegion region, ListRelationship relationship) {
+    }
+
+    record FlagListEntry(String id, String value) {
     }
 
     record ListPlayerFilter(String name, UUID uniqueId, boolean active, boolean invalid) {

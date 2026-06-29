@@ -113,6 +113,12 @@ final class WorldGuardCommandsTests {
                 .isNotNull();
             assertThat(root.getChild("flags").getChild("-w").getChild("world").getChild("region"))
                 .isNotNull();
+            assertThat(root.getChild("flags").getChild("-p").getChild("page").getChild("region"))
+                .isNotNull();
+            assertThat(root.getChild("flags").getChild("-p").getChild("page").getChild("-w").getChild("world").getChild("region"))
+                .isNotNull();
+            assertThat(root.getChild("flags").getChild("-w").getChild("world").getChild("-p").getChild("page").getChild("region"))
+                .isNotNull();
             assertThat(root.getChild("flag").getChild("-w").getChild("world").getChild("region").getChild("flag"))
                 .isNotNull();
             assertThat(root.getChild("f").getChild("-w").getChild("world").getChild("region").getChild("flag"))
@@ -333,6 +339,22 @@ final class WorldGuardCommandsTests {
         assertThat(reshaped.maxZ()).isEqualTo(22);
         assertThat(reshaped.value(WorldGuardValueFlag.TELEPORT)).contains(teleport);
         assertThat(reshaped.flagGroup(WorldGuardValueFlag.TELEPORT)).isEqualTo(WorldGuardRegionGroup.OWNERS);
+    }
+
+    @Test
+    void flagListEntriesIncludeStateAndTypedFlags() {
+        WorldGuardFlagValue greeting = WorldGuardFlagValue.parse(WorldGuardValueFlag.GREETING, "Welcome").orElseThrow();
+        WorldGuardRegion region = region("spawn")
+            .withFlag(WorldGuardFlag.PVP, FlagState.DENY)
+            .withValue(WorldGuardValueFlag.GREETING, greeting);
+
+        List<WorldGuardCommands.FlagListEntry> entries = WorldGuardCommands.flagListEntries(region);
+
+        assertThat(entries)
+            .contains(new WorldGuardCommands.FlagListEntry("pvp", "deny"))
+            .contains(new WorldGuardCommands.FlagListEntry("greeting", "Welcome"))
+            .contains(new WorldGuardCommands.FlagListEntry("teleport", "unset"));
+        assertThat(WorldGuardCommands.flagListPage(entries, 2, 8)).hasSize(8);
     }
 
     @Test

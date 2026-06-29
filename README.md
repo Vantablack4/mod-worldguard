@@ -112,7 +112,9 @@ Not included yet:
 /region remove -w <world> -f <region>
 /region remove -w <world> -u <region>
 /region flags <region>
+/region flags -p <page> <region>
 /region flags -w <world> <region>
+/region flags -w <world> -p <page> <region>
 /region flag <region> <flag> [allow|deny|unset]
 /region flag -w <world> <region> <flag> [allow|deny|unset]
 /region flag <region> <flag> -g <members|owners|nonmembers|nonowners|all|none>
@@ -158,6 +160,8 @@ before the region argument, matching the Brigadier forms listed above.
 parent regions with child regions unless `-f` is supplied to remove descendants
 or `-u` is supplied to unset the direct children parent value; `-f` and `-u`
 cannot be used together.
+`/region flags` shows both state flags and typed value flags, with `-p <page>`
+available for the paginated flag list.
 
 Mutating commands accept upstream-style Fabric permission identifiers like
 `worldguard:region.define`, `worldguard:region.claim`,
