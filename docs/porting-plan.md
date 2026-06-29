@@ -26,6 +26,9 @@ and server-event behavior needed by the Vantablack server.
   flag storage.
 - Local `regions.properties` persistence with schema versioning.
 - `/wg`, `/worldguard`, `/region`, and `/rg` admin commands.
+- Explicit `-w <world>` targeting for existing-region `info`, `select`,
+  `redefine`, `remove`, `teleport`, `flags`, `flag`, priority/parent, and
+  owner/member commands.
 - Optional WorldEdit Fabric import and export for cuboid and polygonal
   selections.
 - Fabric event hooks for block break, block attack, block use/place attempts,
@@ -63,8 +66,9 @@ Full WorldGuard behavior is mostly event coverage and cache design:
 - Replace the Fabric-native group-permission bridge with direct LuckPerms group
   lookup if Vantablack adopts LuckPerms as a hard dependency.
 - Continue command parity work for remaining upstream flags/options, including
-  `/region info -w/-u/-s` forms and remaining explicit `-w` world-targeted
-  mutator forms.
+  `/region info -u/-s`, WorldEdit define/claim `-w` forms, load/save `-w`
+  forms, and free-order switch parsing beyond the current Brigadier command
+  shapes.
 - Add remaining high-friction event parity where Fabric needs targeted mixins:
   dispenser/dropper synthetic item/block actions, lectern book-take protection,
   entity-triggered dripleaf tilt, full non-damaging potion-effect paths, and

@@ -66,8 +66,8 @@ Not included yet:
 - Full WorldGuard Bukkit API compatibility.
 - LuckPerms-native group lookup beyond Fabric permission nodes.
 - Upstream command options that are not yet represented by Brigadier flags,
-  including remaining `/region info` options and remaining explicit `-w`
-  world-targeted mutator forms.
+  including `/region info -u/-s`, WorldEdit define/claim `-w` forms, and
+  free-order switch parsing.
 - Dispenser/dropper synthetic action simulation, lectern book-take protection,
   entity-triggered dripleaf tilt hooks, full non-damaging potion-effect paths,
   and mount/dismount mixin parity beyond the current direct-use ride checks.
@@ -84,33 +84,50 @@ Not included yet:
 /region list -w <world> [-i <id-search>] [-p <player>] [-n] [-s] [page]
 /region list -p <player> [-n] [-s] [-i <id-search>] [-w <world>] [page]
 /region info [region]
+/region info -w <world> <region>
 /region i [region]
 /region define <region>
 /region define <region> selection [priority]
 /region define <region> <x1> <y1> <z1> <x2> <y2> <z2> [priority]
 /region claim <region>
 /region redefine <region>
+/region redefine -w <world> <region>
 /region select [region]
+/region select -w <world> <region>
 /region teleport <region>
+/region teleport -w <world> <region>
 /region teleport -s <region>
+/region teleport -s -w <world> <region>
 /region teleport -c <region>
+/region teleport -c -w <world> <region>
 /region tp <region>
 /region tp -s <region>
 /region tp -c <region>
 /region remove <region>
+/region remove -w <world> <region>
 /region flags <region>
+/region flags -w <world> <region>
 /region flag <region> <flag> [allow|deny|unset]
+/region flag -w <world> <region> <flag> [allow|deny|unset]
 /region flag <region> <flag> -g <members|owners|nonmembers|nonowners|all|none>
 /region flag <region> <typed-flag> <value>
 /region flag <region> <typed-flag> -g <group> <value>
 /region setpriority <region> <priority>
+/region setpriority -w <world> <region> <priority>
 /region setparent <region> [parent]
+/region setparent -w <world> <region> [parent]
 /region addowner <region> <player|uuid:<uuid>|g:<group>> [...]
+/region addowner -w <world> <region> <player|uuid:<uuid>|g:<group>> [...]
 /region removeowner <region> <player|uuid:<uuid>|g:<group>> [...]
+/region removeowner -w <world> <region> <player|uuid:<uuid>|g:<group>> [...]
 /region removeowner <region> -a
+/region removeowner -w <world> <region> -a
 /region addmember <region> <player|uuid:<uuid>|g:<group>> [...]
+/region addmember -w <world> <region> <player|uuid:<uuid>|g:<group>> [...]
 /region removemember <region> <player|uuid:<uuid>|g:<group>> [...]
+/region removemember -w <world> <region> <player|uuid:<uuid>|g:<group>> [...]
 /region removemember <region> -a
+/region removemember -w <world> <region> -a
 /region toggle-bypass [on|off]
 /region load
 /region save
@@ -129,6 +146,8 @@ The special `__global__` region is created lazily by commands that allow it,
 including `info`, `flag`, `flags`, `remove`, and owner/member updates. It is
 rejected by commands that define or reshape physical regions, set priority, or
 set parents, matching upstream WorldGuard behavior.
+Existing-region commands that support `-w <world>` expect the world switch
+before the region argument, matching the Brigadier forms listed above.
 
 Mutating commands accept upstream-style Fabric permission identifiers like
 `worldguard:region.define`, `worldguard:region.claim`,

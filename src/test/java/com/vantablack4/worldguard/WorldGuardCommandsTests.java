@@ -107,6 +107,36 @@ final class WorldGuardCommandsTests {
             assertThat(root.getChild("bypass")).isNotNull();
             assertThat(root.getChild("owner")).isNull();
             assertThat(root.getChild("member")).isNull();
+            assertThat(root.getChild("info").getChild("-w").getChild("world").getChild("region"))
+                .isNotNull();
+            assertThat(root.getChild("i").getChild("-w").getChild("world").getChild("region"))
+                .isNotNull();
+            assertThat(root.getChild("flags").getChild("-w").getChild("world").getChild("region"))
+                .isNotNull();
+            assertThat(root.getChild("flag").getChild("-w").getChild("world").getChild("region").getChild("flag"))
+                .isNotNull();
+            assertThat(root.getChild("f").getChild("-w").getChild("world").getChild("region").getChild("flag"))
+                .isNotNull();
+            for (String alias : List.of("delete", "del", "remove", "rem")) {
+                assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region"))
+                    .as(alias + " -w")
+                    .isNotNull();
+            }
+            for (String alias : List.of("select", "sel", "s", "redefine", "update", "move")) {
+                assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region"))
+                    .as(alias + " -w")
+                    .isNotNull();
+            }
+            for (String alias : List.of("setpriority", "priority", "pri")) {
+                assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region").getChild("priority"))
+                    .as(alias + " -w")
+                    .isNotNull();
+            }
+            for (String alias : List.of("setparent", "parent", "par")) {
+                assertThat(root.getChild(alias).getChild("-w").getChild("world").getChild("region"))
+                    .as(alias + " -w")
+                    .isNotNull();
+            }
         }
     }
 
@@ -234,6 +264,15 @@ final class WorldGuardCommandsTests {
             assertThat(teleport.getChild("region")).as(alias + " region").isNotNull();
             assertThat(teleport.getChild("-s").getChild("region")).as(alias + " -s").isNotNull();
             assertThat(teleport.getChild("-c").getChild("region")).as(alias + " -c").isNotNull();
+            assertThat(teleport.getChild("-w").getChild("world").getChild("region"))
+                .as(alias + " -w")
+                .isNotNull();
+            assertThat(teleport.getChild("-s").getChild("-w").getChild("world").getChild("region"))
+                .as(alias + " -s -w")
+                .isNotNull();
+            assertThat(teleport.getChild("-c").getChild("-w").getChild("world").getChild("region"))
+                .as(alias + " -c -w")
+                .isNotNull();
             assertThat(teleport.getChild("region").getChild("-s")).as(alias + " misplaced -s").isNull();
             assertThat(teleport.getChild("region").getChild("-c")).as(alias + " misplaced -c").isNull();
         }
@@ -302,6 +341,9 @@ final class WorldGuardCommandsTests {
             assertThat(rg.getChild(alias).getChild("region").getChild("domain"))
                 .as(alias)
                 .isNotNull();
+            assertThat(rg.getChild(alias).getChild("-w").getChild("world").getChild("region").getChild("domain"))
+                .as(alias + " -w")
+                .isNotNull();
         }
 
         for (String alias : List.of(
@@ -319,6 +361,12 @@ final class WorldGuardCommandsTests {
                 .isNotNull();
             assertThat(rg.getChild(alias).getChild("region").getChild("-a"))
                 .as(alias + " -a")
+                .isNotNull();
+            assertThat(rg.getChild(alias).getChild("-w").getChild("world").getChild("region").getChild("domain"))
+                .as(alias + " -w")
+                .isNotNull();
+            assertThat(rg.getChild(alias).getChild("-w").getChild("world").getChild("region").getChild("-a"))
+                .as(alias + " -w -a")
                 .isNotNull();
         }
     }
@@ -354,6 +402,15 @@ final class WorldGuardCommandsTests {
             .getChild("region")
             .getChild("-g"))
             .isNull();
+
+        CommandNode<CommandSourceStack> worldFlag = root(dispatcher, "rg")
+            .getChild("flag")
+            .getChild("-w")
+            .getChild("world")
+            .getChild("region")
+            .getChild("flag");
+        assertThat(worldFlag.getChild("value")).isNotNull();
+        assertThat(worldFlag.getChild("-g").getChild("group").getChild("value")).isNotNull();
     }
 
     private static CommandNode<CommandSourceStack> root(
